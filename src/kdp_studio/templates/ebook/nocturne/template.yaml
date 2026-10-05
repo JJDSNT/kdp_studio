@@ -1,0 +1,10 @@
+name: nocturne
+kind: ebook
+title: Nocturne
+description: >
+  The reflowable companion of the Nocturne print template. Same identity,
+  rebuilt for readers: no dark grounds (slow on e-ink, and many readers drop
+  background colours, which would leave light text invisible), hierarchy by
+  space, letter spacing and rules, and every distinction carried by a label
+  as well as a colour.
+origin: Designed for "A Era dos Agentes" (Jaime Dias, 2026).

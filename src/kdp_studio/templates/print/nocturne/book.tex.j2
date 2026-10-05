@@ -1,0 +1,306 @@
+((= Nocturne — print template. Filled by KDP Studio with Jinja, delimiters
+     ((* *)) for blocks, ((( ))) for values. The body arrives as body.tex in
+     the template contract's macros (docs/templates.md). =))
+\documentclass[11pt,twoside,openright,final]{memoir}
+
+% ---------------------------------------------------------------- language
+\usepackage{polyglossia}
+\setmainlanguage[variant=((( labels.babel_variant )))]{((( labels.babel )))}
+
+% ---------------------------------------------------------------- colours
+\usepackage{xcolor}
+((* for name, value in colors.items() *))
+\definecolor{((( name|replace('_', '') )))}{HTML}{((( value )))}
+((* endfor *))
+
+% ---------------------------------------------------------------- fonts
+% Pagella is Zapf's Palatino: a book face with true small caps and old-style
+% figures. Adventor is a geometric sans for labels.
+\usepackage{fontspec}
+\setmainfont{TeX Gyre Pagella}[
+  Ligatures = TeX,
+  Numbers   = {OldStyle,Proportional},
+  SmallCapsFeatures = {Letters=SmallCaps},
+]
+\newfontfamily\displayfont{TeX Gyre Adventor}[Ligatures=TeX]
+% Letter spacing through the font, never with spaces: the compositor
+% collapses white space (docs/origin, §10).
+\newfontfamily\labelfont{TeX Gyre Adventor}[Ligatures=TeX, LetterSpace=18]
+\setmonofont{DejaVu Sans Mono}[Scale=MatchLowercase]
+
+% ---------------------------------------------------------------- micro
+\usepackage[protrusion=true, expansion=true, tracking=true,
+  factor=1100, stretch=18, shrink=18]{microtype}
+
+% ---------------------------------------------------------------- page
+% Bleed: page = trim + 0.125in at top, foot and outer edge; nothing at the
+% spine.
+((* if bleed *))
+\setstocksize{\dimexpr((( trim.paper[1] )))+0.25in\relax}{\dimexpr((( trim.paper[0] )))+0.125in\relax}
+\settrimmedsize{((( trim.paper[1] )))}{((( trim.paper[0] )))}{*}
+\settrims{0.125in}{0.125in}
+((* else *))
+\setstocksize{((( trim.paper[1] )))}{((( trim.paper[0] )))}
+\settrimmedsize{((( trim.paper[1] )))}{((( trim.paper[0] )))}{*}
+((* endif *))
+\settypeblocksize{((( trim.typeblock[1] )))}{((( trim.typeblock[0] )))}{*}
+\setlrmargins{((( trim.spine_margin )))}{*}{*}
+\setulmargins{((( trim.top_margin )))}{*}{*}
+\setheadfoot{\onelineskip}{2.2\onelineskip}
+\setheaderspaces{*}{1.6\onelineskip}{*}
+\checkandfixthelayout
+
+\setSingleSpace{1.045}
+\SingleSpacing
+\clubpenalty=10000
+\widowpenalty=10000
+\displaywidowpenalty=10000
+\brokenpenalty=10000
+\raggedbottom
+\frenchspacing
+\setlength{\emergencystretch}{2em}
+
+% ---------------------------------------------------------------- heads
+\makepagestyle{nocturne}
+\makeevenhead{nocturne}{\labelfont\fontsize{6.6}{8}\selectfont
+  \textcolor{grey}{\MakeUppercase{((( title|latex )))}}}{}{}
+\makeoddhead{nocturne}{}{}{\displayfont\fontsize{7.2}{9}\selectfont
+  \textcolor{grey}{\rightmark}}
+\makeevenfoot{nocturne}{}{\displayfont\fontsize{8}{10}\selectfont\textcolor{grey}{\thepage}}{}
+\makeoddfoot{nocturne}{}{\displayfont\fontsize{8}{10}\selectfont\textcolor{grey}{\thepage}}{}
+\makeheadrule{nocturne}{\textwidth}{0.4pt}
+\copypagestyle{nocturnechapter}{nocturne}
+\makeevenhead{nocturnechapter}{}{}{}
+\makeoddhead{nocturnechapter}{}{}{}
+\makeheadrule{nocturnechapter}{\textwidth}{0pt}
+\aliaspagestyle{chapter}{nocturnechapter}
+\pagestyle{nocturne}
+\nouppercaseheads
+
+% ---------------------------------------------------------------- parts
+% Part opening: night from edge to edge, like the cover.
+\usepackage{eso-pic}
+\renewcommand*{\partnamefont}{\labelfont\fontsize{9}{13}\selectfont\color{cold}}
+\renewcommand*{\partnumfont}{\labelfont\fontsize{9}{13}\selectfont\color{cold}}
+\renewcommand*{\parttitlefont}{\normalfont\fontsize{23}{29}\selectfont\color{cream}}
+\renewcommand*{\printparttitle}[1]{\centering\parttitlefont #1}
+\renewcommand*{\printpartname}{\centering\partnamefont\MakeUppercase{((( labels.part|latex )))}}
+\renewcommand*{\printpartnum}{\partnumfont\thepart}
+\renewcommand*{\midpartskip}{\par\vskip 6pt{\color{cold}\rule{26pt}{1.2pt}}\par\vskip 22pt}
+\renewcommand*{\beforepartskip}{%
+  \AddToShipoutPictureBG*{\AtPageLowerLeft{\color{night}%
+    \rule[-0.4in]{\dimexpr\paperwidth+0.8in\relax}{\dimexpr\paperheight+0.8in\relax}}}%
+  \null\vskip 2.35in}
+\renewcommand*{\afterpartskip}{\vfil\newpage}
+\aliaspagestyle{part}{empty}
+
+\newcommand{\kdppart}[2]{\part{#2}}
+\newcommand{\kdpunnumberedpart}[2]{%
+  \cleartorecto
+  \addcontentsline{toc}{part}{#1}%
+  \part*{#2}}
+
+% ---------------------------------------------------------------- chapters
+% The chapter label is printed from the label the renderer passes, not by
+% \printchaptername: with \setsecnumdepth{part} memoir treats chapters as
+% unnumbered and never calls it -- that is how the number once vanished from
+% the page without an error (docs/origin, §10).
+\newcommand{\kdpchapterlabel}{}
+\makechapterstyle{nocturne}{%
+  \setlength{\beforechapskip}{1.35in}
+  \setlength{\midchapskip}{9pt}
+  \setlength{\afterchapskip}{28pt}
+  \renewcommand*{\chapnamefont}{\labelfont\fontsize{8}{11}\selectfont\color{colddark}}
+  \renewcommand*{\chaptitlefont}{\normalfont\bfseries\fontsize{19}{23}\selectfont\color{deep}}
+  \renewcommand*{\printchaptername}{}
+  \renewcommand*{\chapternamenum}{}
+  \renewcommand*{\printchapternum}{}
+  \renewcommand*{\afterchapternum}{}
+  \renewcommand*{\printchaptertitle}[1]{%
+    \ifx\kdpchapterlabel\empty\else
+      {\chapnamefont\MakeUppercase{\kdpchapterlabel}}\par\vskip 9pt
+    \fi
+    \raggedright\chaptitlefont ##1}
+  \renewcommand*{\afterchaptertitle}{%
+    \par\vskip 7pt{\color{cold}\rule{50pt}{2pt}}\par\vskip \afterchapskip}
+}
+\chapterstyle{nocturne}
+\setsecnumdepth{part}
+
+\newcommand{\kdpchapter}[3]{%
+  \renewcommand{\kdpchapterlabel}{#1}%
+  \chapter[#3]{#2}%
+  \renewcommand{\kdpchapterlabel}{}}
+\newcommand{\kdpfrontsection}[2]{%
+  \chapter*{#2}%
+  \addcontentsline{toc}{chapter}{#1}%
+  \markboth{}{#2}}
+
+\setsecheadstyle{\normalfont\bfseries\fontsize{11.6}{15}\selectfont\color{deep}\raggedright}
+\setbeforesecskip{-14pt plus -2pt minus -2pt}
+\setaftersecskip{5pt}
+
+\usepackage{indentfirst}
+\setlength{\parindent}{1.25em}
+
+% ---------------------------------------------------------------- lists
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=1.1em, itemsep=2pt, topsep=4pt, parsep=0pt,
+  label=\textcolor{colddark}{\rule[0.22ex]{0.38em}{0.38em}}}
+\setlist[enumerate]{leftmargin=1.5em, itemsep=3pt, topsep=5pt, parsep=0pt,
+  label=\textcolor{colddark}{\displayfont\footnotesize\arabic*.}}
+
+% ---------------------------------------------------------------- callouts
+\usepackage[most]{tcolorbox}
+\usepackage{graphicx}
+\usepackage{etoolbox}
+
+\newcommand{\kdplabel}[2][colddark]{%
+  {\labelfont\fontsize{7.4}{10}\selectfont\color{#1}\MakeUppercase{#2}}}
+
+% Cold accent, side rule, no background: concept, warning, practice, note,
+% challenge.
+\newtcolorbox{nocturnenote}{enhanced, breakable, colback=white, colframe=cold,
+  boxrule=0pt, leftrule=2.2pt, sharp corners,
+  left=10pt, right=8pt, top=8pt, bottom=8pt,
+  before skip=13pt, after skip=15pt,
+  fontupper=\fontsize{9.7}{13.6}\selectfont}
+% A recurring framework: the only framed box in the book.
+\newtcolorbox{nocturneframework}{enhanced, breakable, colback=white, colframe=cold,
+  boxrule=1.1pt, sharp corners,
+  left=12pt, right=10pt, top=11pt, bottom=11pt,
+  before skip=16pt, after skip=16pt,
+  fontupper=\fontsize{9.8}{14}\selectfont}
+
+\newenvironment{kdpcallout}[3]{%
+  \ifstrequal{#1}{framework}{%
+    \begin{nocturneframework}\kdplabel{#2}\par\vskip 6pt
+  }{%
+    \begin{nocturnenote}\kdplabel{#2}\ifstrempty{#3}{}{\ \ {\bfseries #3}}\par\vskip 4pt
+  }%
+  \def\kdpcalloutkind{#1}%
+}{%
+  \ifdefstring{\kdpcalloutkind}{framework}{\end{nocturneframework}}{\end{nocturnenote}}%
+}
+
+% ---------------------------------------------------------------- exercises
+% Warm accent and a tinted ground: the one object that steps out of the
+% narrative, recognisable while leafing through.
+\newtcolorbox{nocturneexercise}{enhanced, breakable, colback=shade, colframe=warm,
+  boxrule=0pt, leftrule=3pt, sharp corners,
+  left=12pt, right=10pt, top=11pt, bottom=11pt,
+  before skip=17pt, after skip=17pt,
+  fontupper=\fontsize{9.5}{13.4}\selectfont}
+\newenvironment{kdpexercise}[2]{%
+  \begin{nocturneexercise}
+  \setlist[itemize]{leftmargin=1.1em, itemsep=2pt, topsep=4pt, parsep=0pt,
+    label=\textcolor{warmdark}{\rule[0.22ex]{0.38em}{0.38em}}}%
+  \setlist[enumerate]{leftmargin=1.5em, itemsep=3pt, topsep=5pt, parsep=0pt,
+    label=\textcolor{warmdark}{\displayfont\footnotesize\arabic*.}}%
+  \setlength{\parskip}{5pt}\setlength{\parindent}{0pt}%
+  \kdplabel[warmdark]{#1}\par\vskip 3pt
+  {\normalfont\bfseries\fontsize{14}{18}\selectfont\color{ink}#2}\par\vskip 8pt
+}{\end{nocturneexercise}}
+\newcommand{\kdpsublabel}[1]{%
+  \par\vskip 7pt{\labelfont\fontsize{7}{10}\selectfont\color{warmdark}\MakeUppercase{#1}}\par\vskip 1pt}
+
+% ---------------------------------------------------------------- prompts
+% QR to the companion page, and the prompt printed so it can be read. The QR
+% panel never breaks across pages: a split QR does not scan.
+\newcommand{\kdppromptlabel}[1]{%
+  \par\vskip 6pt{\labelfont\fontsize{6.4}{9}\selectfont\color{warmdark}\MakeUppercase{#1}}\par\vskip 2pt}
+\newcommand{\kdppromptsep}{\par\vskip 6pt}
+% Monospace is never justified: without hyphenation it only opens holes.
+\newcommand{\kdpprompttext}[1]{%
+  {\ttfamily\fontsize{8.2}{11.4}\selectfont\color{ink}\raggedright
+   \hyphenpenalty=10000 \exhyphenpenalty=10000 #1\par}}
+\newcommand{\kdpprompt}[5]{%
+  \begin{tcolorbox}[enhanced, breakable, colback=shadelight,
+      colframe=warmdark, boxrule=0pt, leftrule=1pt, sharp corners,
+      left=10pt, right=10pt, top=9pt, bottom=10pt,
+      before skip=11pt, after skip=12pt]
+    \noindent
+    \ifstrempty{#4}{%
+      \kdplabel[warmdark]{#1}\ \ {\displayfont\footnotesize\color{ink}#2}%
+    }{%
+      % 0.24 of the measure gives a 0.45 mm module for a 33-module symbol
+      % with its 4-module quiet zone; below 0.4 mm print-on-demand paper
+      % scans unreliably.
+      \begin{minipage}[c]{0.24\linewidth}\includegraphics[width=\linewidth]{#4}\end{minipage}\hfill
+      \begin{minipage}[c]{0.73\linewidth}\kdplabel[warmdark]{#1}\ \ {\displayfont\footnotesize\color{ink}#2}\end{minipage}
+      \par\vskip 6pt
+      {\ttfamily\fontsize{7.6}{10}\selectfont\color{deep}\raggedright\hyphenpenalty=10000 #3\par}%
+    }%
+    \vskip 7pt
+    {\color{warm}\rule{\linewidth}{0.5pt}}
+    #5
+  \end{tcolorbox}}
+
+% ---------------------------------------------------------------- misc
+\newcommand{\kdpbreak}{\par\vskip 10pt{\centering\color{rule}\rule{40pt}{0.4pt}\par}\vskip 10pt}
+\newcommand{\kdpimage}[1]{\includegraphics[width=\linewidth]{#1}}
+\newenvironment{kdptable}[1]{\par\vskip 8pt\begin{center}\small\begin{tabular}{#1}}{\end{tabular}\end{center}\par\vskip 8pt}
+
+\usepackage{hyperref}
+\hypersetup{hidelinks, pdftitle={((( title|latex )))}, pdfauthor={((( author|latex )))},
+  pdflang={((( language )))}}
+
+% ---------------------------------------------------------------- contents
+\renewcommand{\contentsname}{((( labels.contents|latex )))}
+\setcounter{tocdepth}{0}
+% The roman numeral box must fit "VIII" without touching the title.
+\setlength{\cftpartnumwidth}{3.1em}
+\setlength{\cftchapternumwidth}{3.1em}
+\setlength{\cftbeforepartskip}{15pt}
+\setlength{\cftbeforechapterskip}{2.5pt}
+\renewcommand{\cftpartfont}{\normalfont\bfseries\color{deep}}
+\renewcommand{\cftpartpagefont}{\normalfont\bfseries\color{deep}}
+\renewcommand{\cftpartleader}{\hfill}
+\renewcommand{\cftpartafterpnum}{\vspace{1pt}}
+\renewcommand{\cftchapterfont}{\normalfont\color{ink}}
+\renewcommand{\cftchapterpagefont}{\normalfont\color{grey}}
+\renewcommand{\cftchapterleader}{\hspace{1em}\color{rule}\cftdotfill{\cftdotsep}}
+\renewcommand{\cftchapterdotsep}{4}
+
+\begin{document}
+
+\frontmatter
+\pagestyle{empty}
+
+% half title
+\null\vfil
+\begin{center}
+  {\labelfont\fontsize{9}{14}\selectfont\color{colddark}\MakeUppercase{((( title|latex )))}}
+\end{center}
+\vfil\newpage\null\newpage
+
+% title page
+\null\vskip 1.1in
+\begin{center}
+  {\normalfont\bfseries\fontsize{30}{36}\selectfont\color{deep}\MakeUppercase{((( title|latex )))}}\par\vskip 14pt
+((* if subtitle *))
+  {\fontsize{13}{18}\selectfont\color{ink}((( subtitle|latex )))}\par\vskip 18pt
+((* endif *))
+  {\color{cold}\rule{40pt}{1.2pt}}\par\vskip 16pt
+((* if tagline *))
+  {\labelfont\fontsize{8.4}{13}\selectfont\color{colddark}\MakeUppercase{((( tagline|latex )))}}\par\vskip 44pt
+((* endif *))
+  {\displayfont\fontsize{12}{16}\selectfont\color{ink}((( author|latex )))}
+\end{center}
+\vfil\newpage
+
+% copyright page
+\null\vfil
+{\fontsize{8.4}{12.4}\selectfont\color{grey}\raggedright\setlength{\parindent}{0pt}\setlength{\parskip}{8pt}
+((( colophon )))
+\par}
+\vfil\newpage
+
+\pagestyle{nocturne}
+\tableofcontents*
+\cleardoublepage
+
+\mainmatter
+\input{body}
+
+\end{document}

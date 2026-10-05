@@ -1,0 +1,20 @@
+# Labels an edition prints, in English. A book overrides any of them under
+# `labels:` in manuscript/en/meta.yaml.
+babel: english
+babel_variant: american
+part: Part
+chapter: Chapter
+contents: Contents
+cover: Cover
+epilogue: Epilogue
+appendix: Appendix
+exercise: Try it
+notes: References and notes
+prompt_hint: Tap the address, or point your camera at the code, and copy the prompt without typing.
+callouts:
+  concept: Concept
+  warning: Watch out
+  practice: In practice
+  challenge: Open challenge
+  note: Note
+  prompt: Get the prompt

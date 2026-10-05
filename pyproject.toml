@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kdp-studio"
+version = "0.1.0"
+description = "Open, filesystem-first production environment for books, from idea to KDP"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Jaime Dias" }]
+# Reading a book, checking it and deciding its gates needs only these.
+# markdown-it-py is the parser behind the book format (docs/book-format.md);
+# Jinja2 fills the edition templates.
+dependencies = [
+    "pyyaml>=6",
+    "markdown-it-py>=3",
+    "mdit-py-plugins>=0.4",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+# Building and measuring editions: QR codes for the prompts, and reading the
+# PDF that LuaLaTeX writes. LuaLaTeX and Ghostscript are system tools;
+# `kdp doctor` says how to install them.
+build = ["qrcode>=8", "pillow>=10", "pypdf>=5"]
+
+[project.scripts]
+kdp = "kdp_studio.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kdp_studio"]
+
+[dependency-groups]
+dev = ["pytest>=8", "flake8>=7"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

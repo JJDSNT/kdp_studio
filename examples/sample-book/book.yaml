@@ -1,0 +1,18 @@
+# A tiny book that exercises every construct of the format (docs/book-format.md).
+schema: 1
+id: sample-book
+author: KDP Studio
+source_language: en
+languages: [en]
+contents:
+  - 00-preface
+  - part: 1
+    sections: [01-first-light, 02-the-workshop]
+  - part: epilogue
+    kind: epilogue
+    sections: [03-what-remains]
+editions:
+  print: {template: nocturne, trim: 6x9, paper: cream, bleed: true}
+  ebook: {template: nocturne}
+exercises:
+  url: "https://example.org/sample/{language}/{id}"

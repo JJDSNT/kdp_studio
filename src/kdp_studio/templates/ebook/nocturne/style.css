@@ -1,0 +1,81 @@
+/* Nocturne — ebook. Never force a background on body: it breaks dark mode
+   and draws a rectangle inside the reader's page. */
+@page { margin: 0; }
+body { font-family: serif; line-height: 1.5; margin: 0 5%; }
+h1, h2, h3, h4 { font-family: serif; line-height: 1.22; color: #12344F; font-weight: bold; }
+h1 { margin: .9em 0 .15em; font-size: 1.42em; }
+h2 { margin: 1.5em 0 .45em; font-size: 1.08em; }
+h3, h4 { margin: 1.2em 0 .4em; font-size: 1em; }
+p { margin: 0 0 .25em; text-indent: 1.15em; text-align: justify; }
+h1 + p, h2 + p, h3 + p, hr + p, div + p, ol + p, ul + p, section + p { text-indent: 0; }
+a { color: #1E8E99; }
+code { font-size: .88em; overflow-wrap: anywhere; }
+
+.chapter-label, .front-label { font-family: sans-serif; font-size: .66em; letter-spacing: .2em;
+  text-transform: uppercase; color: #1E8E99; text-indent: 0; margin: 0 0 .2em; text-align: left; }
+.chapter-rule { border: 0; border-top: 2px solid #32D9E2; width: 3em; margin: .45em 0 1.5em; height: 0; }
+
+/* Part opening: in print a full-bleed night; here space, letter spacing and
+   a rule carry the hierarchy. */
+.part-opening { text-align: center; margin: 0; padding: 22% 1em 0; }
+.part-label { font-family: sans-serif; font-size: .78em; letter-spacing: .26em; text-transform: uppercase;
+  color: #1E8E99; text-indent: 0; margin: 0; text-align: center; padding-left: .26em; }
+.part-rule { border: 0; border-top: 2px solid #32D9E2; width: 2.4em; margin: 1.1em auto 1.5em; height: 0; }
+.part-title { font-size: 1.9em; color: #12344F; margin: 0; line-height: 1.24; text-align: center; }
+
+.title-page { text-align: center; margin-top: 18%; }
+.title-page h1 { font-size: 2.1em; color: #12344F; }
+.title-page p { text-align: center; text-indent: 0; }
+.title-page .subtitle { font-size: 1.05em; }
+.title-page .tagline { font-family: sans-serif; font-size: .76em; color: #1E8E99; letter-spacing: .26em;
+  text-transform: uppercase; margin: 1.3em 0; }
+.colophon p { font-size: .8em; color: #6B7780; text-indent: 0; text-align: left; margin: 0 0 .8em; }
+
+/* Callouts: a side rule and a label, never colour alone. */
+blockquote, .callout { margin: 1.2em 0; padding: .1em 0 .1em .9em; text-indent: 0; border-left: 3px solid #32D9E2; }
+blockquote p, .callout p { margin: .3em 0; text-indent: 0; font-size: .95em; text-align: left; }
+.callout-head { margin: 0 0 .4em; }
+.callout-label { font-family: sans-serif; font-size: .74em; letter-spacing: .16em; text-transform: uppercase;
+  color: #1E8E99; }
+.callout-title { font-weight: bold; }
+.callout-framework { border: 2px solid #32D9E2; padding: .6em .8em; }
+
+/* Exercises: the warm accent, and a label that survives a reader that drops
+   the tint. */
+section.exercise { margin: 1.8em 0; padding: 1em .95em; background-color: #F1EAE0; border-left: 4px solid #E3A870; }
+.exercise-label { font-family: sans-serif; font-size: .62em; letter-spacing: .24em; text-transform: uppercase;
+  color: #A8703A; margin: 0 0 .45em; text-indent: 0; }
+section.exercise h2.exercise-title { margin: .1em 0 .6em; font-size: 1.12em; color: #12202B; }
+section.exercise p { font-size: .95em; text-indent: 0; margin: 0 0 .55em; text-align: left; }
+section.exercise ul, section.exercise ol { margin: .2em 0 .8em; padding-left: 1.3em; }
+section.exercise li { font-size: .95em; margin: 0 0 .38em; text-align: left; }
+.sublabel { font-family: sans-serif; font-size: .66em !important; letter-spacing: .16em; text-transform: uppercase;
+  color: #A8703A; margin: .9em 0 .2em !important; }
+
+.prompt { background-color: #F7F2EA; border-left: 3px solid #A8703A; padding: .75em .85em; margin: 1em 0; }
+.prompt-head { font-family: sans-serif; font-size: .68em; margin: 0 0 .45em; text-indent: 0; }
+.prompt-label { letter-spacing: .14em; text-transform: uppercase; color: #A8703A; font-weight: bold; }
+.prompt-link { margin: 0 0 .6em; }
+.prompt .qr { width: 4.2em; height: auto; float: left; margin: 0 .8em .4em 0; }
+.prompt-url { margin: 0; text-indent: 0; text-align: left; }
+.prompt-url code { font-size: .84em; }
+.prompt-url a { text-decoration: none; }
+.prompt-hint { font-size: .78em; color: #6B7780; }
+.prompt-name { font-family: sans-serif; font-size: .64em; letter-spacing: .16em; text-transform: uppercase;
+  color: #A8703A; text-indent: 0; margin: .65em 0 .18em; clear: both; }
+.prompt-text { font-family: monospace; font-size: .8em; line-height: 1.5; text-indent: 0; margin: 0 0 .3em;
+  text-align: left; clear: both; }
+
+hr.break { border: 0; border-top: 1px solid #DFD8CC; width: 3em; margin: 1.2em auto; }
+table { border-collapse: collapse; margin: 1em 0; font-size: .9em; }
+th, td { border-bottom: 1px solid #DFD8CC; padding: .2em .5em; text-align: left; }
+.notes { border-top: 1px solid #DFD8CC; margin-top: 2em; font-size: .8em; color: #6B7780; }
+.notes li { margin-bottom: .6em; overflow-wrap: anywhere; }
+
+nav ol { list-style: none; padding-left: 0; }
+nav ol ol { padding-left: .9em; }
+nav li { margin: .35em 0; }
+nav a { text-decoration: none; color: #12202B; }
+li.toc-part { margin-top: 1.1em; }
+li.toc-part > a { font-family: sans-serif; font-size: .78em; letter-spacing: .1em; color: #1E8E99;
+  text-transform: uppercase; }

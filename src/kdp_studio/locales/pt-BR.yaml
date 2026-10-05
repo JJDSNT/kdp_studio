@@ -1,0 +1,20 @@
+# Labels an edition prints, in Brazilian Portuguese. A book overrides any of
+# them under `labels:` in manuscript/pt-BR/meta.yaml.
+babel: portuguese
+babel_variant: brazilian
+part: Parte
+chapter: Capítulo
+contents: Sumário
+cover: Capa
+epilogue: Epílogo
+appendix: Apêndice
+exercise: Experimente
+notes: Referências e notas
+prompt_hint: Toque no endereço, ou aponte a câmera para o código, e copie o pedido sem digitar.
+callouts:
+  concept: Conceito
+  warning: Atenção
+  practice: Na prática
+  challenge: Desafio aberto
+  note: Nota
+  prompt: Pegue o pedido

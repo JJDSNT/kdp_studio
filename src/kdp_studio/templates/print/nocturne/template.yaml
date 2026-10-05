@@ -1,0 +1,35 @@
+name: nocturne
+kind: print
+title: Nocturne
+description: >
+  Non-fiction with a night-blue identity. Part openings in full-bleed night,
+  a cold cyan accent for the narrative and a warm amber one for hands-on
+  exercises, so a reader recognises an exercise while leafing through.
+  Pagella body, Adventor labels, real small caps and old-style figures.
+origin: Designed for "A Era dos Agentes" (Jaime Dias, 2026).
+engine: lualatex
+fonts: [TeX Gyre Pagella, TeX Gyre Adventor, DejaVu Sans Mono]
+# The text block and margins for each trim this template has been laid out
+# for. A trim not listed here is refused rather than guessed.
+trims:
+  6x9:
+    paper: [6in, 9in]
+    typeblock: [4.05in, 7.05in]
+    spine_margin: 0.98in
+    top_margin: 0.86in
+# Colours a book may override under `design.colors` in book.yaml.
+colors:
+  ink: "12202B"
+  night: "040D16"
+  deep: "12344F"
+  cold: "32D9E2"
+  cold_dark: "1E8E99"
+  warm: "E3A870"
+  warm_dark: "A8703A"
+  shade: "F1EAE0"
+  shade_light: "F7F2EA"
+  grey: "6B7780"
+  cream: "F2EFE9"
+  rule: "DFD8CC"
+# Full-bleed part openings need bleed in the print file.
+needs_bleed: true
