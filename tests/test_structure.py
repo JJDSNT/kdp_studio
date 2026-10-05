@@ -26,7 +26,7 @@ def test_moving_a_section_renumbers_and_keeps_the_rest_of_book_yaml(sample):
     assert numbers(load_book(sample)) == {"02-the-workshop": 1, "01-first-light": 2, "03-what-remains": 3}
     assert result["impact"]["en"]["renumbered"]["02-the-workshop"] == {"from": 2, "to": 1}
     log = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=sample, capture_output=True, text=True).stdout
-    assert log.strip() == "Reorder the book: the workshop first"
+    assert log.strip() == "Structure: the workshop first"
 
 
 def test_a_reference_by_number_that_changed_target_is_reported(sample):

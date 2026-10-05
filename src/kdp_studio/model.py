@@ -30,7 +30,9 @@ class Model(Protocol):
 
     def available(self) -> str: ...
 
-    def ask(self, system: str, prompt: str, schema: dict[str, Any]) -> dict[str, Any]: ...
+    def ask(self, system: str, prompt: str, schema: dict[str, Any], *, web: bool = False) -> dict[str, Any]:
+        """Answer in the schema's shape. With `web`, the model may search and open pages."""
+        ...
 
 
 class ClaudeCli:
@@ -43,15 +45,18 @@ class ClaudeCli:
     def available(self) -> str:
         return "" if shutil.which(self.executable) else f"{self.executable} is not on PATH (install Claude Code)"
 
-    def ask(self, system: str, prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
+    def ask(self, system: str, prompt: str, schema: dict[str, Any], *, web: bool = False) -> dict[str, Any]:
         reason = self.available()
         if reason:
             raise ModelUnavailable(reason)
+        # Only reading the web is ever granted: no file, shell or edit tool.
+        tools = ["--tools", "WebSearch", "WebFetch", "--allowedTools", "WebSearch", "WebFetch"] if web \
+            else ["--tools", ""]
         try:
             completed = subprocess.run(
-                [self.executable, "-p", "--output-format", "json", "--tools", "", "--no-session-persistence",
+                [self.executable, "-p", "--output-format", "json", *tools, "--no-session-persistence",
                  "--setting-sources", "", "--system-prompt", system, "--json-schema", json.dumps(schema)],
-                input=prompt, capture_output=True, text=True, timeout=self.timeout,
+                input=prompt, capture_output=True, text=True, timeout=self.timeout * (3 if web else 1),
             )
         except subprocess.TimeoutExpired as error:
             raise ModelUnavailable(f"The model took longer than {self.timeout:.0f} s") from error
@@ -96,7 +101,7 @@ class ClaudeApi:
             return "the anthropic SDK is not installed (uv sync --extra agents)"
         return ""
 
-    def ask(self, system: str, prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
+    def ask(self, system: str, prompt: str, schema: dict[str, Any], *, web: bool = False) -> dict[str, Any]:
         reason = self.available()
         if reason:
             raise ModelUnavailable(reason)
@@ -110,6 +115,8 @@ class ClaudeApi:
                 output_config={"effort": self.effort,
                                "format": {"type": "json_schema", "schema": _closed(schema)}},
                 betas=[self.FALLBACK_BETA], fallbacks="default",
+                **({"tools": [{"type": "web_search_20260209", "name": "web_search"},
+                              {"type": "web_fetch_20260209", "name": "web_fetch"}]} if web else {}),
             ) as stream:
                 response = stream.get_final_message()
         except anthropic.AuthenticationError as error:

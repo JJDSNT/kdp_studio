@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -62,17 +63,43 @@ def read_state(root: Path) -> dict[str, Any]:
     return {**empty_state(), **data}
 
 
+_held = threading.local()
+
+
 @contextmanager
 def book_lock(root: Path) -> Iterator[None]:
-    path = root / STATE_FILENAME
-    if fcntl is None:
-        yield
-        return
-    with open(path, "a", encoding="utf-8") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
+    """One writer per book, across processes; re-entrant within a thread.
+
+    A command that holds the lock may call another that takes it (adopting a
+    plan writes the contents): a second flock on the same file from the same
+    thread would wait for itself forever.
+    """
+
+    key = str(root.resolve())
+    depth = getattr(_held, "depth", {})
+    _held.depth = depth
+    if depth.get(key):
+        depth[key] += 1
         try:
             yield
         finally:
+            depth[key] -= 1
+        return
+    path = root / STATE_FILENAME
+    if fcntl is None:
+        depth[key] = 1
+        try:
+            yield
+        finally:
+            depth[key] = 0
+        return
+    with open(path, "a", encoding="utf-8") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        depth[key] = 1
+        try:
+            yield
+        finally:
+            depth[key] = 0
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 

@@ -18,3 +18,8 @@ callouts:
   challenge: Desafio aberto
   note: Nota
   prompt: Pegue o pedido
+research:
+  note: "Pesquisa feita em {date}, por um agente; fontes abertas e registradas em `{ledger}`."
+  findings: Achados
+  not_found: Não encontrado
+  sources: Fontes

@@ -56,4 +56,14 @@ is how *A Era dos Agentes* started, and it cost dearly.
     exists.
 12. **Marketing** — positioning, sales copy, launch calendar.
 
+13. **Fiction** (not the current focus; the author's suggestion) — from Cine
+    Toaster: a cast of characters as book records (name, voice, traits,
+    relationships, arc) with drift checks across chapters (the eye colour
+    that changes in chapter 14 is the literary "face that drifts between
+    shots"); an emotion catalogue (Cine Toaster's `emotion_assets`) and
+    dialogue modes for the writer and reviser; dramatic cores and plot lines,
+    with a map of where each character appears.
+
+Housekeeping: LanguageTool 6.8 (2026-05-05) is out; the pin is 6.6.
+
 More templates join the catalogue whenever a book needs one.

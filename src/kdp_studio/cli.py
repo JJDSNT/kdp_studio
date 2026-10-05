@@ -257,11 +257,50 @@ def cmd_move(args) -> int:
     return 0
 
 
+def cmd_new(args) -> int:
+    from .structure import slug
+
+    root = Path(args.path).expanduser().resolve()
+    if root.exists() and any(root.iterdir()):
+        print(f"error: {root} exists and is not empty", file=sys.stderr)
+        return 2
+    (root / "manuscript" / args.language).mkdir(parents=True)
+    import yaml
+
+    manifest = {"schema": 1, "id": slug(args.title), "author": args.author, "source_language": args.language,
+                "languages": [args.language], "contents": [],
+                "editions": {"print": {"template": "nocturne", "trim": "6x9", "paper": "cream", "bleed": True},
+                             "ebook": {"template": "nocturne"}}}
+    (root / "book.yaml").write_text(f"# {args.title} — a KDP Studio book (docs/book-format.md).\n"
+                                    + yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    (root / "manuscript" / args.language / "meta.yaml").write_text(
+        yaml.safe_dump({"title": args.title, "parts": {}}, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    idea = args.idea or "(the idea, in the author's words)"
+    (root / "intentions.md").write_text(f"# {args.title}\n\n{idea}\n", encoding="utf-8")
+    (root / "style.yaml").write_text("# This book's style decisions (docs/book-format.md).\npractices: []\n",
+                                     encoding="utf-8")
+    (root / ".gitignore").write_text("builds/\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", f"New book: {args.title}"], cwd=root, check=True)
+    print(f"  {args.title}: {root}")
+    print(f"  next: kdp serve {root} --assistant — and tell the assistant your idea")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kdp", description="KDP Studio: books from idea to KDP.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("doctor", help="what works on this machine").set_defaults(func=cmd_doctor)
+
+    p = sub.add_parser("new", help="start a book from an idea")
+    p.add_argument("path")
+    p.add_argument("--title", required=True)
+    p.add_argument("--author", required=True)
+    p.add_argument("--language", default="pt-BR")
+    p.add_argument("--idea", help="the idea, in your words; becomes the first intentions.md")
+    p.set_defaults(func=cmd_new)
 
     p = sub.add_parser("status", help="a book at a glance")
     p.add_argument("book", nargs="?", default=".")

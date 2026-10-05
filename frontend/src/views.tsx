@@ -52,6 +52,13 @@ export function BookView({ book, language }: { book: BookOverview; language: str
         <div className="card"><strong>{reviewed}/{sections.length}</strong> sections approved as they read now</div>
         <div className="card"><strong>{candidates}</strong> candidate version(s) to read</div>
       </div>
+      {!sections.length && (
+        <div className="empty">
+          <h2>No chapters yet</h2>
+          <p>Tell the assistant your idea. It will ask what the book is for and write <code>intentions.md</code> with
+            you; then research, a plan of chapters you adopt, and the writer, chapter by chapter.</p>
+        </div>
+      )}
       <table className="contents">
         <tbody>
           {info.contents.map((entry) =>
@@ -119,6 +126,7 @@ export function SectionView({ route, onChanged }: { route: Route; onChanged: () 
     <div className="page">
       <p className="meta">{data.kind === "chapter" ? `Chapter ${data.number}` : data.kind} · {data.words} words · {data.section}</p>
       <h1>{data.title}</h1>
+      <ChapterPlan language={data.language} section={data.section} empty={!data.text.split(/\n---\n/).slice(1).join("").trim()} />
       <ChapterActions language={data.language} section={data.section} onChanged={() => { reload(); onChanged(); }} />
       <nav className="tabs">
         {tabs.map((tab) => (
@@ -613,6 +621,121 @@ function ChapterActions({ language, section, onChanged }: { language: string; se
           { kind: "revise_section", payload: { language, section, instruction, scope } }, () => go({ view: "jobs", language }))}>Revise</button>
       </div>
       {status && <p className="problem">{status}</p>}
+    </div>
+  );
+}
+
+function ChapterPlan({ language, section, empty }: { language: string; section: string; empty: boolean }) {
+  const book = useQuery(() => get<BookOverview>("/api/book"), [section]);
+  const [status, setStatus] = useState("");
+  const entry = book.data?.languages[language]?.contents
+    .flatMap((e) => (e.type === "part" ? e.sections : [e])).find((s) => s.id === section);
+  async function write() {
+    try {
+      await runCommand("start_job", { kind: "write_section", payload: { language, section } });
+      go({ view: "jobs", language });
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+  if (!entry) return null;
+  return (
+    <div className="plan-box">
+      {entry.synopsis && <p><strong>Covers</strong> {entry.synopsis}</p>}
+      {entry.promise && <p><strong>Promise</strong> {entry.promise}</p>}
+      <button className={empty ? "" : "secondary"} onClick={write}>{empty ? "Write this chapter" : "Rewrite with the writer"}</button>
+      {status && <span className="problem"> {status}</span>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- plan
+
+interface PlanChapter { title: string; synopsis: string; promise: string; research: string[] }
+interface Plan {
+  id: string; state: string; proposed_at: string; instruction: string;
+  plan: { rationale: string; front: { title: string; synopsis: string }[];
+    parts: { title: string; guiding_case: string; chapters: PlanChapter[] }[]; gaps: string[] };
+}
+
+export function PlanView({ book, language, onChanged }: { book: BookOverview; language: string; onChanged: () => void }) {
+  const { data, error, reload } = useQuery(() => get<Plan[]>("/api/plans"), []);
+  const [status, setStatus] = useState("");
+  const hasChapters = book.languages[language].contents.length > 0;
+  if (error) return <Problem text={error} />;
+  if (!data) return <p className="muted">Loading…</p>;
+  const latest = data[0];
+  async function adopt() {
+    try {
+      await runCommand("adopt_plan", { plan_id: latest.id });
+      onChanged();
+      reload();
+      go({ view: "book", language });
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+  if (!latest) return <div className="page"><h1>Plan</h1><p className="muted">No plan yet. Ask the assistant for one.</p></div>;
+  return (
+    <div className="page">
+      <h1>Plan <span className={`state ${latest.state}`}>{latest.state}</span></h1>
+      <p className="muted">Proposed by the architect, {when(latest.proposed_at)}{latest.instruction ? ` — “${latest.instruction}”` : ""}</p>
+      <p>{latest.plan.rationale}</p>
+      {latest.plan.front.map((f) => <p key={f.title}><strong>{f.title}</strong> — <span className="muted">{f.synopsis}</span></p>)}
+      {latest.plan.parts.map((part, i) => (
+        <section key={i} className="plan-part">
+          <h2>Part {i + 1} — {part.title}</h2>
+          {part.guiding_case && <p className="muted">Guiding case: {part.guiding_case}</p>}
+          <ol>
+            {part.chapters.map((c) => (
+              <li key={c.title}><strong>{c.title}</strong>
+                <div>{c.synopsis}</div>
+                <div className="promise">→ {c.promise}</div>
+                {c.research.length > 0 && <div className="muted">research: {c.research.join(", ")}</div>}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))}
+      {latest.plan.gaps.length > 0 && <><h2>Gaps</h2><ul className="list">{latest.plan.gaps.map((g) => <li key={g}>{g}</li>)}</ul></>}
+      {latest.state === "candidate" && (
+        hasChapters
+          ? <p className="muted">The book already has chapters: ask the assistant to add, remove or move them following this plan.</p>
+          : <div className="actions"><button onClick={adopt}>Adopt plan: create these chapters</button></div>
+      )}
+      <Problem text={status} />
+    </div>
+  );
+}
+
+// ------------------------------------------------------------ research
+
+interface Source { url: string; title: string; opened: string; says: string; dossier: string; publisher?: string }
+
+export function ResearchView({ language }: { language: string }) {
+  const sources = useQuery(() => get<Source[]>("/api/sources"), []);
+  const docs = useQuery(() => get<string[]>("/api/documents"), []);
+  const dossiers = (docs.data || []).filter((d) => d.startsWith("research/"));
+  return (
+    <div className="page">
+      <h1>Research</h1>
+      <p className="muted">Every source was opened by the researcher, on the date shown. A source never opened is not here.</p>
+      <h2>Dossiers</h2>
+      <ul className="list">
+        {dossiers.map((d) => <li key={d}><a href={href({ view: "documents", language, document: d })}>{d}</a></li>)}
+        {!dossiers.length && <li className="muted">None yet. Ask the assistant to research something.</li>}
+      </ul>
+      <h2>Sources ({(sources.data || []).length})</h2>
+      <table className="findings"><tbody>
+        {(sources.data || []).map((s) => (
+          <tr key={s.url}>
+            <td className="verdict">{s.opened}</td>
+            <td><a href={s.url} target="_blank" rel="noreferrer">{s.title}</a>{s.publisher && <span className="muted"> — {s.publisher}</span>}
+              <div className="muted">{s.says}</div></td>
+            <td className="muted">{s.dossier}</td>
+          </tr>
+        ))}
+      </tbody></table>
     </div>
   );
 }

@@ -18,7 +18,8 @@ from .state import Actor
 #: Commands an agent may run. Deciding a gate, adopting or rejecting a version
 #: and editing text directly are a person's.
 #: Reordering changes the book's order, so the assistant asks the author first.
-AGENT_COMMANDS = {"open_gate", "propose_version", "build", "check", "start_job", "reorder"}
+AGENT_COMMANDS = {"open_gate", "propose_version", "build", "check", "start_job", "reorder", "add_section",
+                  "remove_section", "add_part", "write_intentions"}
 
 
 def _open_gate(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
@@ -83,6 +84,50 @@ def _approve_chapter(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, A
     return gates.decide_gate(book, gate["id"], "approved", actor=actor, rationale=p.get("rationale", ""))
 
 
+def _add_section(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from .structure import add_section
+
+    return add_section(book, title=p["title"], actor=actor, reason=p.get("reason", ""),
+                       synopsis=p.get("synopsis", ""), promise=p.get("promise", ""), kind=p.get("kind", "chapter"),
+                       before=p.get("before", ""), after=p.get("after", ""), into=str(p.get("into", "") or ""))
+
+
+def _remove_section(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from .structure import remove_section
+
+    return remove_section(book, section=p["section"], actor=actor, reason=p.get("reason", ""))
+
+
+def _add_part(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from .structure import add_part
+
+    return add_part(book, part=str(p["part"]), title=p["title"], actor=actor, reason=p.get("reason", ""),
+                    kind=p.get("kind", "part"), before=str(p.get("before", "") or ""),
+                    after=str(p.get("after", "") or ""))
+
+
+def _adopt_plan(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from .agents.architect import adopt_plan
+
+    return adopt_plan(book, p["plan_id"], actor=actor, rationale=p.get("rationale", ""))
+
+
+def _write_intentions(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    """intentions.md in the author's words, as agreed in the conversation; the author confirmed it."""
+
+    from .history import commit
+    from .state import book_lock
+
+    text = str(p.get("text", "")).strip()
+    if not text:
+        raise ValidationError("intentions.md cannot be empty")
+    path = book.root / "intentions.md"
+    with book_lock(book.root):
+        path.write_text(text + "\n", encoding="utf-8")
+        commit(book.root, [path], "Intentions: " + (p.get("reason") or "written with the author"), actor)
+    return {"path": "intentions.md", "words": len(text.split())}
+
+
 COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "open_gate": _open_gate,
     "decide_gate": _decide_gate,
@@ -95,6 +140,11 @@ COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "start_job": _start_job,
     "reorder": _reorder,
     "approve_chapter": _approve_chapter,
+    "add_section": _add_section,
+    "remove_section": _remove_section,
+    "add_part": _add_part,
+    "adopt_plan": _adopt_plan,
+    "write_intentions": _write_intentions,
 }
 
 

@@ -22,13 +22,14 @@ def overview(studio: Studio) -> str:
                 lines.append(f"  {label}: {entry['title']}")
             for s in sections:
                 number = f"ch. {s['number']}" if s["number"] else s["kind"]
+                plan = f" [covers: {s['synopsis']}]" if s.get("synopsis") else ""
                 extra = f", {s['candidates']} candidate version(s)" if s["candidates"] else ""
                 review = s.get("review")
                 if review:
                     extra += f", review {review['state']}" + (" but changed since" if review["changed_since"] else "")
                 elif language == data["source_language"]:
                     extra += ", not reviewed"
-                lines.append(f"    - {s['id']} ({number}) {s['title']} — {s['words']} words{extra}")
+                lines.append(f"    - {s['id']} ({number}) {s['title']} — {s['words']} words{extra}{plan}")
     waiting = [g for g in data["gates"] if g["state"] == "waiting"]
     decided = [g for g in data["gates"] if g["state"] != "waiting"]
     lines.append(f"Gates: {len(waiting)} waiting, {len(decided)} decided.")
@@ -96,6 +97,28 @@ def _jobs(studio: Studio, args: dict[str, Any]) -> str:
     return "\n".join(lines) or "No jobs."
 
 
+def _research(studio: Studio, args: dict[str, Any]) -> str:
+    from ..agents.researcher import dossiers
+
+    if args.get("path"):
+        return studio.document_any(args["path"])
+    found = dossiers(studio.book)
+    lines = [f"- {d['slug']}: {d['title']} ({d['words']} words) — read with path {d['path']}" for d in found]
+    return "\n".join(lines) or "No research yet."
+
+
+def _plans(studio: Studio, args: dict[str, Any]) -> str:
+    import json as _json
+
+    from ..agents.architect import plans
+
+    found = plans(studio.book)
+    if not found:
+        return "No plan proposed yet."
+    latest = found[0]
+    return f"{latest['id']} ({latest['state']}):\n" + _json.dumps(latest["plan"], ensure_ascii=False, indent=1)
+
+
 #: name -> (what it returns, what it needs, how)
 READS: dict[str, tuple[str, str, Callable[[Studio, dict[str, Any]], str]]] = {
     "book": ("the structure, words per section, candidate versions and gates", "", lambda s, a: overview(s)),
@@ -109,6 +132,8 @@ READS: dict[str, tuple[str, str, Callable[[Studio, dict[str, Any]], str]]] = {
     "style": ("writing-vice findings (register, form, the book's own decisions)", "language; section optional",
               _style),
     "jobs": ("background jobs and their results", "", _jobs),
+    "research": ("the research dossiers, or one of them", "path optional (research/<slug>.md)", _research),
+    "plan": ("the latest plan the architect proposed", "", _plans),
 }
 
 

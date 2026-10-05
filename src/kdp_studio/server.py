@@ -66,6 +66,7 @@ class Studio:
         def section(s, language: str) -> dict[str, Any]:
             return {"type": "section", "id": s.id, "kind": s.kind, "number": s.number, "title": s.title,
                     "toc_title": s.toc_title, "words": s.words, "candidates": candidates.get((language, s.id), 0),
+                    "synopsis": s.synopsis, "promise": s.promise,
                     "review": reviews.get(s.id) if language == book.source_language else None}
 
         languages = {}
@@ -126,16 +127,27 @@ class Studio:
 
     def document(self, relative: str) -> dict[str, Any]:
         path = (self.root / relative).resolve()
-        allowed = [(self.root / d).resolve() for d in DOCUMENTS]
+        allowed = [(self.root / d).resolve() for d in (*DOCUMENTS, "research")]
         if path.suffix != ".md" or not any(path == a or a in path.parents for a in allowed) or not path.is_file():
             raise NotFoundError(f"No document {relative!r}")
         return {"path": relative, "text": path.read_text("utf-8")}
+
+    def document_any(self, relative: str) -> str:
+        """A research dossier or editorial document, read-only, inside the book."""
+
+        path = (self.root / relative).resolve()
+        if self.root.resolve() not in path.parents or path.suffix != ".md" or not path.is_file():
+            raise NotFoundError(f"No document {relative!r}")
+        return path.read_text("utf-8")
 
     def documents(self) -> list[str]:
         found = ["intentions.md"] if (self.root / "intentions.md").is_file() else []
         editorial = self.root / "editorial"
         if editorial.is_dir():
             found += [str(p.relative_to(self.root)) for p in sorted(editorial.rglob("*.md"))]
+        research = self.root / "research"
+        if research.is_dir():
+            found += [str(p.relative_to(self.root)) for p in sorted(research.glob("*.md"))]
         return found
 
     def ebook_css(self) -> str:
@@ -223,6 +235,18 @@ def create_app(root: Path, *, copilot_url: str = "", assistant_reason: str = "")
         from .continuity import repetitions
 
         return repetitions(studio.book, lang)
+
+    @app.get("/api/plans")
+    def plan_list():
+        from .agents.architect import plans
+
+        return plans(studio.book)
+
+    @app.get("/api/sources")
+    def source_list():
+        from .agents.researcher import ledger
+
+        return ledger(studio.book)
 
     @app.get("/api/jobs")
     def job_list():

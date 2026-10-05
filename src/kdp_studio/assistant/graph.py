@@ -61,6 +61,18 @@ PROPOSALS = {
                       "change any text — prefer it to writing a version yourself",
     "reorder": "move a section before/after another section or into a part (`section` and one of `before`, "
                "`after`, `into`), or a part before/after another part (`part`); needs `rationale`",
+    "write_intentions": "write intentions.md from the interview (`text`: the author's intention in the author's "
+                        "own words — for whom, from where to where, what the book is NOT, what the reader takes "
+                        "away), needs `rationale`",
+    "research": "start the researcher on a question (`question`; `title` = a short name): it searches, opens and "
+                "records sources into a dossier",
+    "plan_book": "start the architect (`instruction` optional): parts and chapters, each with synopsis and promise, "
+                 "as a candidate plan the author adopts",
+    "write_section": "start the writer on a section (language, section; `instruction` optional): it writes the "
+                     "chapter to its synopsis and promise, as a candidate version",
+    "add_section": "add a chapter (`title`, `synopsis`, `promise`; place with `before`/`after` a section or `into` "
+                   "a part, else at the end; needs `rationale`) as a stub for the writer",
+    "remove_section": "take a section out of the book (`section`, needs `rationale`); it is archived, not deleted",
 }
 #: Runs at once: builds are disposable and checks only measure.
 RUNS = {
@@ -74,6 +86,10 @@ SYSTEM = (
     "invent text, sources or results. When a question needs more, set `action` to `read` with `query` one of: "
     + "; ".join(f"`{n}` ({t}; needs: {needs or 'nothing'})" for n, (t, needs, _) in READS.items())
     + ". Read only what the question needs, then answer. "
+    "The author's flow: an idea; you interview them (for whom, from where to where, what the book is NOT, what "
+    "the reader takes away) and, with their words, write intentions.md; research; the architect's plan, which "
+    "the author adopts; the writer, chapter by chapter; then review chapter by chapter. The book gains, loses "
+    "and reorders chapters at any time. Never derive the intention from a topic or from existing text: ask. "
     "The author works chapter by chapter and commands through you: to change text, start the reviser with a "
     "precise instruction rather than writing a version yourself. The voice is decided for the whole book (its "
     "voice guide), not per chapter. Chapter approval is the author's: you may say a chapter looks ready. "
@@ -110,6 +126,10 @@ SCHEMA = {
         "text": {"type": "string"},
         "gate_kind": {"type": "string", "enum": ["", *GATE_KINDS]},
         "instruction": {"type": "string"},
+        "question": {"type": "string"},
+        "title": {"type": "string"},
+        "synopsis": {"type": "string"},
+        "promise": {"type": "string"},
         "part": {"type": "string"},
         "before": {"type": "string"},
         "after": {"type": "string"},
@@ -179,6 +199,7 @@ def build(model: Model, studio: Studio, checkpointer=None):
                 "rationale": answer.get("rationale", ""), "text": answer.get("text", ""),
                 "kind": answer.get("gate_kind", ""), "subject": answer.get("subject", ""),
                 "instruction": answer.get("instruction", ""),
+                **{k: answer.get(k, "") for k in ("question", "title", "synopsis", "promise")},
                 **{k: answer.get(k, "") for k in ("part", "before", "after", "into")},
             }
         update["messages"] = [AIMessage(content=reply)]
@@ -205,6 +226,31 @@ def build(model: Model, studio: Studio, checkpointer=None):
             question = (f"Registrar uma versão candidata de {p['section']} ({p['language']}, escopo {p['scope']})? "
                         f"Motivo: {p['rationale'].rstrip('. ')}. Ela não muda o texto: você compara e decide depois.")
             payload = {k: p[k] for k in ("language", "section", "scope", "rationale", "text")}
+        elif p["action"] == "write_intentions":
+            question = f"Gravar isto como o intentions.md do livro?\n\n{p['text']}"
+            payload = {"text": p["text"], "reason": p["rationale"]}
+        elif p["action"] in ("research", "plan_book", "write_section"):
+            if p["action"] == "research":
+                question = f"Pôr o pesquisador para investigar: “{p['question']}”?"
+                job = {"question": p["question"], "name": p["title"]}
+            elif p["action"] == "plan_book":
+                question = "Pedir ao arquiteto um plano de partes e capítulos" + (
+                    f" ({p['instruction']})" if p["instruction"] else "") + "? Você adota ou não depois."
+                job = {"instruction": p["instruction"]}
+            else:
+                question = f"Pôr o redator para escrever {p['section']}" + (
+                    f" ({p['instruction']})" if p["instruction"] else "") + "? Fica como versão candidata."
+                job = {"language": p["language"], "section": p["section"], "instruction": p["instruction"]}
+            payload = {"kind": p["action"], "payload": job}
+        elif p["action"] == "add_section":
+            where = (f" antes de {p['before']}" if p["before"] else f" depois de {p['after']}" if p["after"]
+                     else f" na parte {p['into']}" if p["into"] else " no fim")
+            question = f"Acrescentar o capítulo “{p['title']}”{where}? Promessa: {p['promise'] or '—'}"
+            payload = {k: p[k] for k in ("title", "synopsis", "promise", "before", "after", "into") if p.get(k)}
+            payload["reason"] = p["rationale"]
+        elif p["action"] == "remove_section":
+            question = f"Tirar {p['section']} do livro? Ele vai para archive/removed, não é apagado."
+            payload = {"section": p["section"], "reason": p["rationale"]}
         elif p["action"] == "revise_section":
             question = (f"Pedir ao revisor esta mudança em {p['section']} ({p['language']}, escopo {p['scope']})? "
                         f"“{p['instruction']}”. Ele deixa uma versão candidata para você comparar.")
@@ -227,7 +273,8 @@ def build(model: Model, studio: Studio, checkpointer=None):
         answer = interrupt({"message": question, "proposal": {k: v for k, v in p.items() if k != "text"}})
         if not (isinstance(answer, dict) and answer.get("approved")):
             return {"messages": [AIMessage(content="Certo, não fiz nada.")], "proposal": {}}
-        command = "start_job" if p["action"] in ("revise_voice", "revise_section") else p["action"]
+        jobs_ = ("revise_voice", "revise_section", "research", "plan_book", "write_section")
+        command = "start_job" if p["action"] in jobs_ else p["action"]
         try:
             result = dispatch(studio.book, command, payload, AGENT)
         except Exception as error:  # noqa: BLE001
@@ -250,10 +297,21 @@ def build(model: Model, studio: Studio, checkpointer=None):
             return {"messages": [AIMessage(content=text)], "proposal": {},
                     "navigate": {"view": "book", "language": p["language"], "section": "", "version": "",
                                  "document": "", "id": uuid.uuid4().hex[:8]}}
-        if p["action"] in ("revise_voice", "revise_section"):
-            who = "revisor de voz" if p["action"] == "revise_voice" else "revisor"
-            return {"messages": [AIMessage(content=f"O {who} começou ({result['id']}). A versão aparece "
-                                                   "em Tarefas e nas versões do capítulo quando ficar pronta.")],
+        if p["action"] in ("add_section", "remove_section", "write_intentions"):
+            done = {"add_section": f"Acrescentei {result.get('section', '')}: o redator pode escrevê-lo quando você "
+                                   "quiser.",
+                    "remove_section": f"Tirei {p['section']} do livro (arquivado em archive/removed).",
+                    "write_intentions": "Gravei o intentions.md. Quando estiver de acordo, aprove o portão de "
+                                        "intenção."}[p["action"]]
+            view = "documents" if p["action"] == "write_intentions" else "book"
+            return {"messages": [AIMessage(content=done)], "proposal": {},
+                    "navigate": {"view": view, "language": p["language"], "section": "", "version": "",
+                                 "document": "intentions.md" if view == "documents" else "", "id": uuid.uuid4().hex[:8]}}
+        if p["action"] in jobs_:
+            who = {"revise_voice": "revisor de voz", "revise_section": "revisor", "research": "pesquisador",
+                   "plan_book": "arquiteto", "write_section": "redator"}[p["action"]]
+            return {"messages": [AIMessage(content=f"O {who} começou ({result['id']}). O resultado aparece "
+                                                   "em Tarefas quando ficar pronto.")],
                     "proposal": {}, "navigate": {"view": "jobs", "language": p["language"], "section": "",
                                                  "version": "", "document": "", "id": uuid.uuid4().hex[:8]}}
         return {"messages": [AIMessage(content=f"Abri o portão {result['id']}: {result['question']}")],

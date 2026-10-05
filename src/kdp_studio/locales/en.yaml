@@ -18,3 +18,8 @@ callouts:
   challenge: Open challenge
   note: Note
   prompt: Get the prompt
+research:
+  note: "Researched on {date} by an agent; sources opened and recorded in `{ledger}`."
+  findings: Findings
+  not_found: Not found
+  sources: Sources

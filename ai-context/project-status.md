@@ -56,6 +56,13 @@ author works on it in the control room with the assistant.
   the assistant proposes revisions and moves and asks first. Verified in a
   headless browser on a copy of the book with the real model.
 
+- From an idea to chapters (ADR 0011): `kdp new`; researcher (web, dossier,
+  dated source ledger, not-found), architect (plan with synopsis and promise,
+  adopted by the author), writer (chapter to its promise as a candidate);
+  add/remove sections and parts; the assistant runs the whole flow, asking
+  first. Real end to end on a new book. The book lock is re-entrant (a nested
+  command deadlocked on its own flock).
+
 ## Next action
 
 NILC-Metrix and spaCy as engines; then the continuity reviser, the

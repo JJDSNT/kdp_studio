@@ -47,6 +47,9 @@ class Section:
     body: str
     #: Chapter number across the whole book, or 0 when unnumbered.
     number: int = 0
+    #: What the section covers, and what the reader can do after it (the plan).
+    synopsis: str = ""
+    promise: str = ""
 
     @property
     def words(self) -> int:
@@ -139,6 +142,8 @@ class Book:
             toc_title=str(front.get("toc_title") or title),
             body=body,
             number=number if kind == "chapter" else 0,
+            synopsis=str(front.get("synopsis") or "").strip(),
+            promise=str(front.get("promise") or "").strip(),
         )
 
     def contents(self, language: str) -> list[Entry]:
@@ -209,7 +214,11 @@ def load_book(path: Path | str) -> Book:
         raise BookFormatError(
             f"{BOOK_FILENAME} declares schema {schema!r}; this KDP Studio reads schema {SCHEMA_VERSION}"
         )
-    for key in ("id", "source_language", "contents"):
+    for key in ("id", "source_language"):
         if not manifest.get(key):
             raise BookFormatError(f"{BOOK_FILENAME} needs {key!r}")
+    # A new book starts with no sections: the plan creates them.
+    if not isinstance(manifest.get("contents", []) or [], list):
+        raise BookFormatError(f"{BOOK_FILENAME}: contents must be a list")
+    manifest["contents"] = manifest.get("contents") or []
     return Book(root=root, manifest=manifest)

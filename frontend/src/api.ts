@@ -24,6 +24,8 @@ export interface SectionEntry {
   words: number;
   candidates: number;
   review: { gate: string; state: string; changed_since: boolean; decided_at: string } | null;
+  synopsis: string;
+  promise: string;
 }
 
 export interface PartEntry {

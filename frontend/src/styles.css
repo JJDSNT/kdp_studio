@@ -121,3 +121,12 @@ mark { background: #fbefd9; }
 .ask input { flex: 1; }
 .rewritten p { margin: 0 0 .5em; }
 .rewritten del, .rewritten ins { display: block; padding: .3em .5em; border-radius: 4px; }
+
+.plan-box { background: white; border: 1px solid var(--line); border-left: 3px solid var(--cold); border-radius: 6px;
+  padding: .5em 1em; margin: .8em 0; }
+.plan-box p { margin: .3em 0; }
+.plan-part ol { padding-left: 1.3em; }
+.plan-part li { margin: .7em 0; }
+.promise { color: var(--good); }
+.empty { background: white; border: 1px dashed var(--line); border-radius: 6px; padding: 1em 1.4em; margin: 1em 0; }
+header nav { flex-wrap: wrap; }

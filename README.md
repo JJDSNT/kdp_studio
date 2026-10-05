@@ -44,6 +44,7 @@ The check says so, with the measured value beside the requirement.
 | `kdp continuity <book>` | passages that recur across sections, read at once |
 | `kdp revise <book> <section>` | the voice reviser: a candidate version fixing register and form |
 | `kdp move <book> <section> --before/--after/--into … -m why` | reorder, with the references the move breaks |
+| `kdp new <dir> --title … --author … --idea …` | start a book from an idea |
 | `kdp tools [install <name>]` | open tools used as resources: Vale, LanguageTool, EPUBCheck |
 | `kdp serve <book> [--assistant]` | the control room in the browser, with the assistant |
 
@@ -126,6 +127,28 @@ in the chat; on your yes it acts as an agent, and the history says so. It never
 decides a gate and never adopts a version. The model is your own Claude Code
 login by default (`claude -p`, no key stored); `KDP_MODEL=claude-api` uses the
 API instead.
+
+## From an idea to a book
+
+```bash
+uv run kdp new ~/books/my-book --title "My Book" --author "Me" --idea "What it is for, in my words"
+uv run kdp serve ~/books/my-book --assistant
+```
+
+Then, mostly in conversation with the assistant:
+
+1. **Intention** — it interviews you and writes `intentions.md` with your words.
+2. **Research** — the researcher searches the web, opens every source it
+   cites, and records a dossier and a dated ledger of sources, including what
+   it could *not* find.
+3. **Plan** — the architect proposes parts and chapters, each with what it
+   covers and what the reader can do after it; you adopt the plan and the
+   chapters exist.
+4. **Writing** — the writer drafts one chapter at a time, to its promise, as a
+   candidate version.
+5. **Review** — chapter by chapter, below; chapters are added, removed and
+   moved whenever the book needs it
+   ([ADR 0011](docs/architecture/0011-from-idea-to-chapters.md)).
 
 ## Working chapter by chapter
 

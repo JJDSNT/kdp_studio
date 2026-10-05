@@ -2,8 +2,8 @@ import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { get, type BookOverview, type Info, type SectionEntry } from "./api.ts";
 import { go, href, parse, type Route } from "./route.ts";
 import {
-  BookView, ContinuityView, DocumentsView, EditionsView, GatesView, JobsView, ProofsView, SectionView, StyleView,
-  VersionView, useQuery,
+  BookView, ContinuityView, DocumentsView, EditionsView, GatesView, JobsView, PlanView, ProofsView, ResearchView,
+  SectionView, StyleView, VersionView, useQuery,
 } from "./views.tsx";
 import type { Navigation } from "./Assistant.tsx";
 
@@ -44,7 +44,7 @@ export default function App() {
         <a className="brand" href={href({ view: "book", language })}>KDP Studio</a>
         <span className="book-title">{data.languages[language].title}</span>
         <nav>
-          {(["book", "style", "continuity", "gates", "jobs", "editions", "proofs", "documents"] as const).map((view) => (
+          {(["book", "research", "plan", "style", "continuity", "gates", "jobs", "editions", "proofs", "documents"] as const).map((view) => (
             <a key={view} className={route.view === view ? "active" : ""} href={href({ view, language })}>{view}</a>
           ))}
         </nav>
@@ -80,6 +80,8 @@ export default function App() {
         {route.view === "style" && <StyleView language={language} />}
         {route.view === "continuity" && <ContinuityView language={language} />}
         {route.view === "jobs" && <JobsView language={language} />}
+        {route.view === "plan" && <PlanView book={data} language={language} onChanged={book.reload} />}
+        {route.view === "research" && <ResearchView language={language} />}
       </main>
       {assistant && assistantOpen && (
         <aside className="assistant">
