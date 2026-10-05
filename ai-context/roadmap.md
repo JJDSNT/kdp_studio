@@ -64,6 +64,13 @@ is how *A Era dos Agentes* started, and it cost dearly.
     dialogue modes for the writer and reviser; dramatic cores and plot lines,
     with a map of where each character appears.
 
+Later (noted 2026-10-04, at the author's request — not now):
+
+- **Interface localisation.** Not a Portuguese interface: localisation support,
+  with the person choosing the interface language (strings out of the
+  components into per-language catalogues, starting with en and pt-BR). The
+  interface language is independent of the book's language.
+
 Housekeeping: LanguageTool 6.8 (2026-05-05) is out; the pin is 6.6.
 
 More templates join the catalogue whenever a book needs one.
