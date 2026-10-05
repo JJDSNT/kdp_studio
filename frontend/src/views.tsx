@@ -109,6 +109,7 @@ export function SectionView({ route, onChanged }: { route: Route; onChanged: () 
     <div className="page">
       <p className="meta">{data.kind === "chapter" ? `Chapter ${data.number}` : data.kind} · {data.words} words · {data.section}</p>
       <h1>{data.title}</h1>
+      <div className="actions"><ReviewVoiceButton language={data.language} section={data.section} /></div>
       <nav className="tabs">
         {tabs.map((tab) => (
           <a key={tab} className={route.tab === tab ? "active" : ""} href={href({ ...route, tab })}>
@@ -406,3 +407,148 @@ export function DocumentsView({ route }: { route: Route }) {
 }
 
 export { go };
+
+// --------------------------------------------------------------- style
+
+interface StyleFinding { practice: string; section: string; line: number; excerpt: string; match: string; message: string }
+interface StyleReport {
+  coverage: { enforced: number; total: number; unenforced: { id: string; rule: string }[] };
+  counts: Record<string, number>;
+  practices: { id: string; category: string; rule: string; enforced: boolean; source: string }[];
+  engines: Record<string, string>;
+  findings: StyleFinding[];
+}
+
+export function StyleView({ language }: { language: string }) {
+  const [engines, setEngines] = useState(false);
+  const { data, error } = useQuery(() => get<StyleReport>("/api/style", { lang: language, engines: String(engines) }),
+    [language, engines]);
+  const [only, setOnly] = useState("");
+  if (error) return <Problem text={error} />;
+  if (!data) return <p className="muted">{engines ? "Running the catalogue and the open engines…" : "Checking…"}</p>;
+  const rules = Object.fromEntries(data.practices.map((p) => [p.id, p]));
+  const shown = data.findings.filter((f) => !only || f.practice === only);
+  return (
+    <div className="page">
+      <h1>Style — {language}</h1>
+      <p className="muted">{data.coverage.enforced} of {data.coverage.total} practices are enforced by a check.
+        Prompts to agents and code are never checked: they are written for a machine.</p>
+      <label className="toggle"><input type="checkbox" checked={engines} onChange={(e) => setEngines(e.target.checked)} />
+        Also run the open engines (LanguageTool, Vale) configured in style.yaml</label>
+      {Object.entries(data.engines).map(([name, state]) => <p key={name} className="muted">{name}: {state}</p>)}
+      <div className="chips">
+        <button className={only ? "secondary" : ""} onClick={() => setOnly("")}>All ({data.findings.length})</button>
+        {Object.entries(data.counts).sort((a, b) => b[1] - a[1]).map(([id, n]) => (
+          <button key={id} className={only === id ? "" : "secondary"} onClick={() => setOnly(id)} title={rules[id]?.rule}>
+            {id} ({n})</button>
+        ))}
+      </div>
+      {only && rules[only] && <p className="rule">{rules[only].rule}</p>}
+      <table className="findings">
+        <tbody>
+          {shown.map((f, i) => (
+            <tr key={i}>
+              <td className="verdict">{f.practice}</td>
+              <td><a href={href({ view: "section", language, section: f.section, tab: "edit" })}>{f.section}</a>
+                <div className="muted">line {f.line}</div></td>
+              <td><mark>{f.match}</mark> <span className="muted">{f.excerpt}</span>
+                {f.message && <div className="muted">{f.message}</div>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {data.coverage.unenforced.length > 0 && (
+        <>
+          <h2>Still depends on a reader</h2>
+          <ul className="list">{data.coverage.unenforced.map((u) => <li key={u.id}><code>{u.id}</code> {u.rule}</li>)}</ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------- continuity
+
+interface Repetition {
+  passage: string; words: number; sections: number; span: number;
+  occurrences: { section: string; number: number; title: string; paragraph: string }[];
+}
+
+export function ContinuityView({ language }: { language: string }) {
+  const { data, error } = useQuery(() => get<Repetition[]>("/api/continuity", { lang: language }), [language]);
+  if (error) return <Problem text={error} />;
+  if (!data) return <p className="muted">Reading the whole book…</p>;
+  return (
+    <div className="page">
+      <h1>Continuity — {language}</h1>
+      <p className="muted">Passages that recur in different sections. A template line may be deliberate; a sentence
+        repeated eighteen chapters apart is usually a seam. The book is read at once, not chapter by chapter.</p>
+      {data.map((r, i) => (
+        <div key={i} className="gate">
+          <p><strong>{r.sections}×</strong> <span className="muted">{r.words} words, chapters {r.span} apart</span></p>
+          <p className="passage">“{r.passage}”</p>
+          <p className="muted">{r.occurrences.map((o, j) => (
+            <span key={o.section}>{j > 0 && " · "}<a href={href({ view: "section", language, section: o.section })}>
+              {o.number ? `ch. ${o.number}` : o.section}</a></span>))}</p>
+        </div>
+      ))}
+      {!data.length && <p className="muted">No passage recurs.</p>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- jobs
+
+interface Job {
+  id: string; kind: string; state: string; created_at: string; payload: Record<string, string>;
+  progress: { at: string; message: string }[]; result: Record<string, unknown> | null; error: string;
+  requested_by: { id: string; kind: string };
+}
+
+export function JobsView({ language }: { language: string }) {
+  const { data, error, reload } = useQuery(() => get<Job[]>("/api/jobs"), []);
+  const running = (data || []).some((j) => j.state === "running" || j.state === "queued");
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(reload, 2000);
+    return () => clearInterval(timer);
+  }, [running, reload]);
+  if (error) return <Problem text={error} />;
+  if (!data) return <p className="muted">Loading…</p>;
+  return (
+    <div className="page">
+      <h1>Jobs</h1>
+      <p className="muted">Agent work that takes longer than a chat turn. A job writes into the book only when it
+        finishes, and only through commands: a candidate version, never the text itself.</p>
+      {data.map((job) => (
+        <div key={job.id} className={`gate ${job.state === "done" ? "approved" : job.state === "running" ? "waiting" : ""}`}>
+          <p><strong>{job.kind}</strong> {job.payload.section} <span className={`state ${job.state}`}>{job.state}</span>
+            <span className="muted"> — {job.requested_by.id} ({job.requested_by.kind}), {when(job.created_at)}</span></p>
+          {job.progress.length > 0 && <p className="muted">{job.progress[job.progress.length - 1].message}</p>}
+          {job.error && <p className="problem">{job.error}</p>}
+          {job.result && (
+            <p>{String(job.result.summary || "")}{" "}
+              {job.result.version ? <a href={href({ view: "version", language: job.payload.language || language,
+                section: job.payload.section, version: String(job.result.version) })}>Compare version {String(job.result.version)} →</a> : null}
+              {Array.isArray(job.result.violations) && job.result.violations.length > 0 &&
+                <span className="problem"> ⚠ {(job.result.violations as string[]).join("; ")}</span>}</p>
+          )}
+        </div>
+      ))}
+      {!data.length && <p className="muted">No jobs yet. Start one from a section (“Review voice”) or ask the assistant.</p>}
+    </div>
+  );
+}
+
+export function ReviewVoiceButton({ language, section }: { language: string; section: string }) {
+  const [status, setStatus] = useState("");
+  async function start() {
+    try {
+      await runCommand("start_job", { kind: "revise_voice", payload: { language, section } });
+      go({ view: "jobs", language });
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+  return <><button className="secondary" onClick={start}>Review voice</button>{status && <span className="problem"> {status}</span>}</>;
+}

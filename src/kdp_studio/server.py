@@ -153,6 +153,9 @@ def create_app(root: Path, *, copilot_url: str = "", assistant_reason: str = "")
         raise ToolUnavailableError("The control room needs the studio extra: uv sync --extra studio") from error
 
     studio = Studio(root)
+    from . import jobs
+
+    jobs.reconcile(studio.book)
     app = FastAPI(title="KDP Studio")
     app.state.studio = studio
 
@@ -205,6 +208,24 @@ def create_app(root: Path, *, copilot_url: str = "", assistant_reason: str = "")
     def templates():
         return [{"name": t.name, "kind": t.kind, "title": t.title, "description": t.description, "source": t.source}
                 for t in catalog.catalog(studio.root)]
+
+    @app.get("/api/style")
+    def style(lang: str, section: str | None = None, engines: bool = False):
+        from .style import check_style
+
+        return check_style(studio.book, lang, [section] if section else None, engines=engines).public_dict()
+
+    @app.get("/api/continuity")
+    def continuity(lang: str):
+        from .continuity import repetitions
+
+        return repetitions(studio.book, lang)
+
+    @app.get("/api/jobs")
+    def job_list():
+        from . import jobs
+
+        return jobs.list_jobs(studio.book)
 
     @app.get("/ebook.css")
     def ebook_css():

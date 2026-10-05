@@ -1,0 +1,28 @@
+# The writing-vice catalogue for English. Form and structure carry over from
+# the Portuguese catalogue; register rules for English are added when an
+# English edition meets them.
+practices:
+  - id: opening-imagine
+    category: form
+    rule: "Opening paragraphs with “Imagine…” / “Think of…”: go straight into the scene."
+    check: {pattern: "^(?:Imagine|Think of|Picture)\\b", where: paragraph_start, max_per_section: 1}
+  - id: antithetic-pair
+    category: form
+    rule: "An antithetic pair closing the paragraph. Fine once; thirty in a row become a mannerism."
+    check: {pattern: "(?:;|,| —) (?:and )?not [^.;!?]{3,60}[.!]$", max_per_section: 3}
+  - id: hedge-in-practice
+    category: form
+    rule: "A hedge inside a practice (“if you have access”, “when available”): verify first and write firmly."
+    check: {pattern: "\\b(?:if you have access|when available|if available|to be confirmed)\\b", flags: i, where: exercise}
+  - id: broken-reference
+    category: mixed-origin
+    rule: "A reference to a chapter that moved or no longer exists."
+    check: {builtin: broken_reference}
+  - id: thesis-as-refrain
+    category: content
+    rule: "Restating the book's thesis as a refrain instead of demonstrating it in a new situation."
+    check: {builtin: refrain}
+  - id: definitions-not-competence
+    category: content
+    rule: "Covering definitions instead of building competence."
+    check: null

@@ -17,7 +17,7 @@ from .state import Actor
 
 #: Commands an agent may run. Deciding a gate, adopting or rejecting a version
 #: and editing text directly are a person's.
-AGENT_COMMANDS = {"open_gate", "propose_version", "build", "check"}
+AGENT_COMMANDS = {"open_gate", "propose_version", "build", "check", "start_job"}
 
 
 def _open_gate(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
@@ -62,6 +62,12 @@ def _check(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
     return run_checks(book, language, p.get("edition", "print"))
 
 
+def _start_job(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from . import jobs
+
+    return jobs.start(book, p["kind"], dict(p.get("payload") or {}), actor)
+
+
 COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "open_gate": _open_gate,
     "decide_gate": _decide_gate,
@@ -71,6 +77,7 @@ COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "reject_version": _reject_version,
     "build": _build,
     "check": _check,
+    "start_job": _start_job,
 }
 
 

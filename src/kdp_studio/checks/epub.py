@@ -6,13 +6,15 @@ verdict is reported as its own finding.
 
 from __future__ import annotations
 
+import json
 import re
-import shutil
 import subprocess
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+from .. import tools
+from ..errors import ToolUnavailableError
 from . import FAIL, NOT_CHECKED, PASS, WARN, Finding
 
 OPF = "{http://www.idpf.org/2007/opf}"
@@ -77,14 +79,31 @@ def check_epub(path: Path) -> list[Finding]:
         else:
             findings.append(_cover_size(archive.read(base + cover["href"])))
 
-    if shutil.which("epubcheck"):
-        run = subprocess.run(["epubcheck", str(path)], capture_output=True, text=True)
-        findings.append(Finding("epubcheck", "EPUBCheck", PASS if run.returncode == 0 else FAIL,
-                                detail=(run.stdout + run.stderr).strip().splitlines()[-1] if run.stdout or run.stderr else ""))
-    else:
-        findings.append(Finding("epubcheck", "EPUBCheck", NOT_CHECKED,
-                                detail="EPUBCheck is not installed; `kdp doctor` says how"))
+    findings.append(_epubcheck(path))
     return findings
+
+
+def _epubcheck(path: Path) -> Finding:
+    """The reference validator, when installed (`kdp tools install epubcheck`)."""
+
+    try:
+        command = tools.command("epubcheck")
+    except ToolUnavailableError as error:
+        return Finding("epubcheck", "EPUBCheck", NOT_CHECKED, detail=error.message)
+    run = subprocess.run([*command, "--json", "-", str(path)], capture_output=True, text=True)
+    try:
+        report = json.loads(run.stdout)
+    except ValueError:
+        tail = (run.stdout + run.stderr).strip().splitlines()[-1:] or [""]
+        return Finding("epubcheck", "EPUBCheck", FAIL if run.returncode else PASS, detail=tail[0])
+    messages = report.get("messages") or []
+    severe = [m for m in messages if m.get("severity") in ("FATAL", "ERROR")]
+    warnings = [m for m in messages if m.get("severity") == "WARNING"]
+    version = (report.get("checker") or {}).get("checkerVersion", "")
+    first = severe[0] if severe else (warnings[0] if warnings else None)
+    detail = f"{first['ID']}: {first['message']}" if first else ""
+    return Finding("epubcheck", f"EPUBCheck {version}".strip(), FAIL if severe else (WARN if warnings else PASS),
+                   f"{len(severe)} error(s), {len(warnings)} warning(s)", "0 errors", detail)
 
 
 def _cover_size(data: bytes) -> Finding:

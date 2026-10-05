@@ -36,7 +36,7 @@ def unavailable_reason() -> str:
         return "Node is not installed (it runs the Copilot Runtime)"
     if not BUNDLE.is_file():
         return "the Copilot Runtime is not built (cd frontend && npm install && npm run build)"
-    from .models import model_from_env
+    from ..model import model_from_env
 
     try:
         return model_from_env().available()
@@ -52,7 +52,7 @@ def agent_app(root: Path):
 
     from ..server import Studio
     from .graph import build
-    from .models import model_from_env
+    from ..model import model_from_env
 
     # The page's context arrives as AG-UI objects and is checkpointed with the
     # turn; name the type rather than rely on a default LangGraph will close.

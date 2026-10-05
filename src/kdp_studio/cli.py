@@ -185,6 +185,64 @@ def cmd_serve(args) -> int:
     return 0
 
 
+def cmd_style(args) -> int:
+    from .style import check_style
+
+    book = load_book(args.book)
+    for language in _languages(book, args.lang):
+        report = check_style(book, language, args.section or None, engines=not args.no_engines).public_dict()
+        coverage = report["coverage"]
+        print(f"\n  [{language}] {coverage['enforced']}/{coverage['total']} practices enforced by a check")
+        for name, state in report["engines"].items():
+            print(f"    engine {name}: {state}")
+        for finding in report["findings"]:
+            print(f"    {finding['practice']:28} {finding['section']}:{finding['line']}  “{finding['match']}”"
+                  + (f"  — {finding['message']}" if finding["message"] else ""))
+        print("    " + (", ".join(f"{k} {v}" for k, v in sorted(report["counts"].items())) or "no findings"))
+        if coverage["unenforced"]:
+            print("    Still depends on a reader:")
+            for item in coverage["unenforced"]:
+                print(f"      - {item['id']}: {item['rule']}")
+    return 0
+
+
+def cmd_continuity(args) -> int:
+    from .continuity import repetitions
+
+    book = load_book(args.book)
+    for language in _languages(book, args.lang):
+        found = repetitions(book, language, args.min_words)
+        print(f"\n  [{language}] {len(found)} passage(s) recur across sections")
+        for group in found:
+            where = ", ".join(str(o["number"] or o["section"]) for o in group["occurrences"])
+            print(f"    {group['sections']}× ({where})  “{group['passage'][:110]}”")
+    return 0
+
+
+def cmd_tools(args) -> int:
+    from . import tools
+
+    if args.action == "install":
+        for name in args.names:
+            print(f"  {name}: {tools.install(name)}")
+        return 0
+    for tool in tools.TOOLS.values():
+        found = tools.location(tool.name)
+        print(f"  {tool.name:13} {tool.version:7} {tool.license:13} {'installed' if found else 'missing  '}  "
+              f"{tool.enables}")
+    return 0
+
+
+def cmd_revise(args) -> int:
+    from . import jobs
+
+    book = load_book(args.book)
+    job = jobs.start(book, "revise_voice", {"language": args.lang or book.source_language,
+                                            "section": args.section}, _actor(), wait=True)
+    print(json.dumps(job["result"] or job["error"], ensure_ascii=False, indent=2))
+    return 0 if job["state"] == "done" else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kdp", description="KDP Studio: books from idea to KDP.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -223,6 +281,30 @@ def main(argv: list[str] | None = None) -> int:
         g.add_argument("--book", default=".")
         g.add_argument("--rationale", "-m")
     p.set_defaults(func=cmd_gate)
+
+    p = sub.add_parser("style", help="the writing-vice catalogue, checked")
+    p.add_argument("book", nargs="?", default=".")
+    p.add_argument("--lang")
+    p.add_argument("--section", action="append")
+    p.add_argument("--no-engines", action="store_true", help="only the catalogue's own checks")
+    p.set_defaults(func=cmd_style)
+
+    p = sub.add_parser("continuity", help="passages that recur across sections")
+    p.add_argument("book", nargs="?", default=".")
+    p.add_argument("--lang")
+    p.add_argument("--min-words", type=int, default=7)
+    p.set_defaults(func=cmd_continuity)
+
+    p = sub.add_parser("revise", help="the voice reviser on one section: a candidate version")
+    p.add_argument("book")
+    p.add_argument("section")
+    p.add_argument("--lang")
+    p.set_defaults(func=cmd_revise)
+
+    p = sub.add_parser("tools", help="open tools KDP Studio uses (Vale, LanguageTool, EPUBCheck)")
+    p.add_argument("action", choices=["list", "install"], nargs="?", default="list")
+    p.add_argument("names", nargs="*")
+    p.set_defaults(func=cmd_tools)
 
     p = sub.add_parser("serve", help="the control room, on this machine")
     p.add_argument("book", nargs="?", default=".")

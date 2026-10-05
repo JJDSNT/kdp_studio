@@ -67,6 +67,30 @@ def _checks(studio: Studio, args: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _style(studio: Studio, args: dict[str, Any]) -> str:
+    from ..style import check_style
+
+    section = args.get("section")
+    report = check_style(studio.book, args.get("language") or studio.book.source_language,
+                         [section] if section else None, engines=False).public_dict()
+    lines = [f"Counts: {report['counts'] or 'none'}"]
+    lines += [f"- [{f['practice']}] {f['section']}:{f['line']} “{f['match']}” — {f['excerpt'][:140]}"
+              for f in report["findings"][:80]]
+    lines.append("Not checked by code (depends on a reader): "
+                 + "; ".join(u["rule"] for u in report["coverage"]["unenforced"]))
+    return "\n".join(lines)
+
+
+def _jobs(studio: Studio, args: dict[str, Any]) -> str:
+    from ..jobs import list_jobs
+
+    found = list_jobs(studio.book)[:10]
+    lines = [f"- {j['id']} {j['kind']} {j['payload']}: {j['state']}"
+             + (f" → {j['result']}" if j.get("result") else "")
+             + (f" ({j['error']})" if j.get("error") else "") for j in found]
+    return "\n".join(lines) or "No jobs."
+
+
 #: name -> (what it returns, what it needs, how)
 READS: dict[str, tuple[str, str, Callable[[Studio, dict[str, Any]], str]]] = {
     "book": ("the structure, words per section, candidate versions and gates", "", lambda s, a: overview(s)),
@@ -77,6 +101,9 @@ READS: dict[str, tuple[str, str, Callable[[Studio, dict[str, Any]], str]]] = {
     "versions": ("candidate and decided versions", "language and section, optional", _versions),
     "version": ("one version's fidelity report", "version", _version),
     "checks": ("the last measured checks of an edition", "edition (print|ebook), language", _checks),
+    "style": ("writing-vice findings (register, form, the book's own decisions)", "language; section optional",
+              _style),
+    "jobs": ("background jobs and their results", "", _jobs),
 }
 
 

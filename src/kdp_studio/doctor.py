@@ -14,6 +14,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import tools
+
 OK, MISSING = "ok", "missing"
 ASSETS = Path(__file__).with_name("web_assets")
 
@@ -59,8 +61,10 @@ def capabilities() -> list[Capability]:
                    OK if shutil.which("gs") else MISSING, remedy="sudo apt install ghostscript"),
         Capability("Git", "a history of every decision in the book", OK if shutil.which("git") else MISSING,
                    remedy="sudo apt install git"),
-        Capability("EPUBCheck", "the reference EPUB validator", OK if shutil.which("epubcheck") else MISSING,
-                   remedy="sudo apt install epubcheck"),
+        *[Capability(t.name, t.enables, OK if tools.location(t.name) else MISSING,
+                     detail=f"{t.version}, {t.license}", remedy=f"kdp tools install {t.name}"
+                     + (" (needs Java 17+)" if t.needs_java and not shutil.which("java") else ""))
+          for t in tools.TOOLS.values()],
         Capability("Control room", "`kdp serve`: the browser interface",
                    OK if _module("fastapi") and (ASSETS / "app" / "index.html").is_file() else MISSING,
                    remedy="uv sync --extra studio && make ui"),

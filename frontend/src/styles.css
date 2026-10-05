@@ -103,3 +103,10 @@ td.num { text-align: right; color: var(--muted); width: 3.5em; }
 .assistant > * { flex: 1; min-height: 0; }
 .assistant-confirm { border: 1px solid var(--warm); background: var(--soft); border-radius: 6px; padding: .6em .9em; margin: .5em 0; }
 .assistant-confirm button { margin-right: .5em; }
+
+.chips { display: flex; flex-wrap: wrap; gap: .4em; margin: 1em 0; }
+.chips button { font-size: .8em; padding: .25em .6em; }
+.rule { background: white; border-left: 3px solid var(--cold); padding: .4em .8em; }
+mark { background: #fbefd9; }
+.passage { font-family: ui-serif, Georgia, serif; }
+.findings td.verdict { width: 12em; text-transform: none; font-size: .8em; color: var(--warm); }

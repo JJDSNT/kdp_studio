@@ -1,0 +1,99 @@
+# The writing-vice catalogue for Brazilian Portuguese (docs/origin, §9).
+# Every entry was observed in a real production. `check: null` means no
+# automatic check exists: the report lists it as depending on a reader.
+#
+# The rule is not grammar -- every form on the left is correct. The rule is
+# whether a Brazilian would write it in a text that wants to sound close.
+practices:
+  # ------------------------------------------------------------- register
+  - id: enclise-infinitivo
+    category: register
+    rule: "Ênclise no infinitivo (vê-lo, fazê-las, conduzi-lo): reescrever com o objeto explícito."
+    check: {pattern: "\\b\\w+[aeiáéêíóôu]-(?:lo|la|los|las)\\b", flags: i}
+  - id: enclise-pronome
+    category: register
+    rule: "Ênclise com pronome (encheu-se, seguiram-se, escolhe-se, disse-lhe): próclise brasileira ou sujeito explícito."
+    check: {pattern: "\\b\\w{2,}-(?:se|lhe|lhes|me|te|nos)\\b", flags: i}
+  - id: enclise-gerundio
+    category: register
+    rule: "Ênclise no gerúndio (escrevendo-o, fazendo-a): reescrever."
+    check: {pattern: "\\b\\w+ndo-(?:o|a|os|as)\\b", flags: i}
+  - id: lhe-objeto
+    category: register
+    rule: "“lhe/lhes” como objeto: “para ele”, “dele”, ou reescrever."
+    check: {pattern: "\\blhes?\\b", flags: i}
+  - id: se-impessoal
+    category: register
+    rule: "“se” impessoal (o que se faz, para se saber): “o que fazer”, “para descobrir”, “dá para”."
+    check: {pattern: "\\b(?:o que se|para se|não se conseguem?|como se faz) \\w+", flags: i}
+  - id: convem
+    category: register
+    rule: "“convém”: usar “vale”."
+    check: {pattern: "\\bconvém\\b", flags: i}
+  - id: vocabulario-arcaico
+    category: register
+    rule: "Vocabulário de registro antigo (afortunado, outrora, cumpre, porquanto): vocabulário corrente."
+    check: {pattern: "\\b(?:afortunad[oa]s?|outrora|cumpre|porquanto|destarte|mister)\\b", flags: i}
+  - id: havia-feito
+    category: register
+    rule: "“havia feito” em excesso: “tinha feito”."
+    check: {pattern: "\\bhavi(?:a|am|amos) \\w+(?:ado|ido|ito|to|sto)\\b", flags: i, max_per_section: 2}
+
+  # ----------------------------------------------------------------- form
+  - id: abertura-imagine
+    category: form
+    rule: "Abrir parágrafos com “Imagine…” / “Pense em…”: entrar direto na cena."
+    check: {pattern: "^(?:Imagine|Imaginem|Pense em|Pensem em)\\b", where: paragraph_start, max_per_section: 1}
+  - id: par-antitetico
+    category: form
+    rule: "Par antitético no fim do parágrafo. Boa frase isolada; trinta seguidas viram maneirismo."
+    check: {pattern: "(?:;|,| —) (?:e )?não [^.;!?]{3,60}[.!]$", max_per_section: 3}
+  - id: troca-de-pessoa
+    category: form
+    rule: "Chamar o leitor de “o leitor” num texto que o trata por “você”."
+    check: {builtin: person_switch}
+  - id: hedge-na-pratica
+    category: form
+    rule: "Hedge dentro da prática (“se você tiver acesso”, “quando disponível”): verificar antes e escrever com firmeza; pendência vai em comentário editorial."
+    check: {pattern: "\\b(?:se você tiver acesso|quando disponível|caso disponível|se disponível|será confirmad[oa])\\b", flags: i, where: exercise}
+  - id: historia-por-marcos
+    category: form
+    rule: "Conduzir a história por uma sucessão de marcos datados, cada um com sua moral."
+    check: null
+
+  # ------------------------------------------------------- mixed origin
+  - id: remissao-quebrada
+    category: mixed-origin
+    rule: "Remissão a capítulo que mudou de lugar ou deixou de existir."
+    check: {builtin: broken_reference}
+  - id: costura-visivel
+    category: mixed-origin
+    rule: "Costura visível: partes reescritas convivendo com antigas, com voz, densidade e recursos gráficos diferentes."
+    check: null
+  - id: exemplo-orfao
+    category: mixed-origin
+    rule: "Exemplo órfão: caso condutor citado numa parte que foi descartada."
+    check: null
+
+  # -------------------------------------------------------------- content
+  - id: tese-como-refrao
+    category: content
+    rule: "Repetir a tese do livro como refrão em vez de demonstrá-la numa situação nova."
+    why: "As frases da tese ficam em `refrains` no style.yaml do livro."
+    check: {builtin: refrain}
+  - id: cobrir-definicoes
+    category: content
+    rule: "Cobrir definições no lugar de formar competência: o leitor sai sabendo nomear o que continua sem saber usar."
+    check: null
+  - id: encolher-capitulo
+    category: content
+    rule: "Encolher um capítulo em vez de reescrevê-lo: remove o conteúdo e deixa as transições."
+    check: null
+  - id: exemplo-vaza
+    category: content
+    rule: "Deixar o exemplo de uma parte vazar para outra, achatando o conceito da anterior."
+    check: null
+  - id: leitor-aprendiz
+    category: content
+    rule: "Tratar o leitor como aprendiz do ofício quando ele deveria ser observador do trabalho."
+    check: null

@@ -40,6 +40,10 @@ The check says so, with the measured value beside the requirement.
 | `kdp check <book>` | measured verdicts against KDP and EPUB requirements |
 | `kdp gate open/approve/changes/reject` | human gates, recorded in the book |
 | `kdp compare <before> <after>` | fidelity: did the words change? (Markdown or PDF) |
+| `kdp style <book>` | the writing-vice catalogue, checked (with LanguageTool and Vale when configured) |
+| `kdp continuity <book>` | passages that recur across sections, read at once |
+| `kdp revise <book> <section>` | the voice reviser: a candidate version fixing register and form |
+| `kdp tools [install <name>]` | open tools used as resources: Vale, LanguageTool, EPUBCheck |
 | `kdp serve <book> [--assistant]` | the control room in the browser, with the assistant |
 
 ## Why this exists
@@ -121,6 +125,26 @@ in the chat; on your yes it acts as an agent, and the history says so. It never
 decides a gate and never adopts a version. The model is your own Claude Code
 login by default (`claude -p`, no key stored); `KDP_MODEL=claude-api` uses the
 API instead.
+
+## Style, continuity and the first agent
+
+The writing-vice catalogue of the specification is a set of checks. Each
+practice says whether a check enforces it; the report lists, by name, what
+still depends on a reader. A book adds its own decisions in `style.yaml` —
+*A Era dos Agentes* says "prática, nunca exercício", with the one approved
+exception of chapter 3 — and the thesis phrases that must never become a
+refrain.
+
+Mature open tools do the rest, as resources: LanguageTool (with its Brazilian
+Portuguese module), Vale, EPUBCheck — installed for the user only with
+`kdp tools install` ([ADR 0008](docs/architecture/0008-open-tools-as-resources.md)).
+
+The **voice reviser** is the first production agent. It reads a section, its
+findings and the book's voice guide, and answers with exact edits that KDP
+Studio applies itself — so nothing outside them can change — as a candidate
+version the author compares and adopts or not
+([ADR 0009](docs/architecture/0009-agents-answer-with-edits.md)). It runs as a
+background job; the assistant can start it, after asking.
 
 ## Edition templates
 

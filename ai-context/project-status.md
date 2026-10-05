@@ -42,10 +42,18 @@ author works on it in the control room with the assistant.
   (LangGraph CoAgent through CopilotKit v2, model through the Claude Code CLI
   or the API).
 
+- Milestone 3, first half: `style.py` (catalogue, coverage, the book's
+  `style.yaml`), `linters.py` (LanguageTool, Vale), `tools.py` (pinned,
+  verified, per-user installs), `continuity.py`, `jobs.py`, `agents/voice.py`;
+  Style, Continuity and Jobs views; the assistant can read style findings and
+  start the voice reviser. On *A Era dos Agentes*: 35 register/form findings
+  (23 infinitive enclises — the open item T3), EPUBCheck 5.4 with 0 errors and
+  0 warnings, 21 recurring passages.
+
 ## Next action
 
-Milestone 3: the specialised agents behind the assistant, starting with the
-voice reviser (the vice catalogue as checks) and the interviewer.
+NILC-Metrix and spaCy as engines; then the continuity reviser, the
+interviewer and the intention guardian (roadmap, milestone 3).
 
 ## Risks and gaps
 

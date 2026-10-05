@@ -20,11 +20,16 @@ is how *A Era dos Agentes* started, and it cost dearly.
    over the commands; candidate versions, word diff with the fidelity report,
    adoption as a git commit, byte-for-byte editing; the editorial assistant as
    a CopilotKit CoAgent (ADR 0007).
-3. **Specialised agents** — the assistant delegating to agents with declared
-   tasks and scopes, each producing candidate versions or records:
-   interviewer (`intentions.md`), architect, writer, voice reviser (with the
-   vice catalogue), continuity reviser (whole book at once), the intention
-   guardian at every automatic gate. Long tasks run as jobs, not chat turns.
+3. **Specialised agents** — started (2026-10-04): the vice catalogue as checks
+   with coverage, the book's `style.yaml`, open engines (LanguageTool, Vale,
+   EPUBCheck) via `kdp tools`, the continuity map, background jobs, and the
+   **voice reviser** answering with edits (ADR 0009). Next in this milestone:
+   - NILC-Metrix as an engine (density and complexity for a beginner reader;
+     the book's R4) and spaCy `pt_core_news_lg` to make register rules precise
+     (pronominal vs impersonal "se");
+   - the continuity reviser as an agent over the repetition map (deliberate
+     template vs seam), the interviewer (`intentions.md`), the intention
+     guardian at every automatic gate, the writer.
 4. **Companion** — `kdp companion`: prompt pages, `pedido.txt`, QR targets and
    the start page generated from the manuscript, replacing the legacy
    exporter; link check; one repository for several books.

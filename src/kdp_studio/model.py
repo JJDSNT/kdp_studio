@@ -18,7 +18,7 @@ import shutil
 import subprocess
 from typing import Any, Protocol
 
-from ..errors import ToolUnavailableError
+from .errors import ToolUnavailableError
 
 
 class ModelUnavailable(ToolUnavailableError):

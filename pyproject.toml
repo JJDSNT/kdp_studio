@@ -43,3 +43,4 @@ dev = ["pytest>=8", "flake8>=7"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+pythonpath = ["tests"]

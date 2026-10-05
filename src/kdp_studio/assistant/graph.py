@@ -24,7 +24,7 @@ from ..gates import KINDS as GATE_KINDS
 from ..server import Studio
 from ..state import Actor
 from ..versions import SCOPES
-from .models import Model, ModelUnavailable
+from ..model import Model, ModelUnavailable
 from .reads import READS, overview, read
 
 AGENT = Actor("assistant", "agent")
@@ -44,6 +44,8 @@ VIEWS = {
     "version": "a candidate version against the current text (needs version)", "gates": "the human gates",
     "editions": "builds and measured checks", "proofs": "the print pages, to look at",
     "documents": "intentions and editorial documents (document optional)",
+    "style": "the writing-vice findings of the whole book", "continuity": "passages that recur across sections",
+    "jobs": "background jobs, with their progress and results",
 }
 
 #: Changes it may propose; each is a command, confirmed by the author first.
@@ -52,6 +54,8 @@ PROPOSALS = {
                        "`text` = the complete new Markdown of the section, frontmatter included). It is a "
                        "candidate: the author compares and decides.",
     "open_gate": "open a human gate for the author to decide (needs gate_kind; subject when the kind needs one)",
+    "revise_voice": "start the voice reviser on a section, as a background job (needs language, section): it "
+                    "fixes the register and form findings and records a candidate version for the author",
 }
 #: Runs at once: builds are disposable and checks only measure.
 RUNS = {
@@ -186,14 +190,19 @@ def build(model: Model, studio: Studio, checkpointer=None):
             question = (f"Registrar uma versão candidata de {p['section']} ({p['language']}, escopo {p['scope']})? "
                         f"Motivo: {p['rationale'].rstrip('. ')}. Ela não muda o texto: você compara e decide depois.")
             payload = {k: p[k] for k in ("language", "section", "scope", "rationale", "text")}
+        elif p["action"] == "revise_voice":
+            question = (f"Pôr o revisor de voz para trabalhar em {p['section']} ({p['language']})? "
+                        "Ele corrige só registro e forma e deixa uma versão candidata para você comparar.")
+            payload = {"kind": "revise_voice", "payload": {"language": p["language"], "section": p["section"]}}
         else:
             question = f"Abrir o portão {p['kind']}{' de ' + p['subject'] if p['subject'] else ''} para você decidir?"
             payload = {"kind": p["kind"], "subject": p["subject"]}
         answer = interrupt({"message": question, "proposal": {k: v for k, v in p.items() if k != "text"}})
         if not (isinstance(answer, dict) and answer.get("approved")):
             return {"messages": [AIMessage(content="Certo, não fiz nada.")], "proposal": {}}
+        command = "start_job" if p["action"] == "revise_voice" else p["action"]
         try:
-            result = dispatch(studio.book, p["action"], payload, AGENT)
+            result = dispatch(studio.book, command, payload, AGENT)
         except Exception as error:  # noqa: BLE001
             return {"messages": [AIMessage(content=f"O KDP Studio recusou: {getattr(error, 'message', error)}")],
                     "proposal": {}}
@@ -203,6 +212,11 @@ def build(model: Model, studio: Studio, checkpointer=None):
                     "proposal": {},
                     "navigate": {"view": "version", "version": result["id"], "language": p["language"],
                                  "section": p["section"], "document": "", "id": uuid.uuid4().hex[:8]}}
+        if p["action"] == "revise_voice":
+            return {"messages": [AIMessage(content=f"O revisor de voz começou ({result['id']}). A versão aparece "
+                                                   "em Tarefas e nas versões do capítulo quando ficar pronta.")],
+                    "proposal": {}, "navigate": {"view": "jobs", "language": p["language"], "section": "",
+                                                 "version": "", "document": "", "id": uuid.uuid4().hex[:8]}}
         return {"messages": [AIMessage(content=f"Abri o portão {result['id']}: {result['question']}")],
                 "proposal": {}, "navigate": {"view": "gates", "language": p["language"], "section": "",
                                              "version": "", "document": "", "id": uuid.uuid4().hex[:8]}}

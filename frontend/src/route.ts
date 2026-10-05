@@ -1,7 +1,8 @@
 // Where the room is, kept in the address so a reload, a link or the assistant
 // can put the author anywhere.
 
-export type View = "book" | "section" | "version" | "gates" | "editions" | "proofs" | "documents";
+export type View = "book" | "section" | "version" | "gates" | "editions" | "proofs" | "documents" | "style"
+  | "continuity" | "jobs";
 
 export interface Route {
   view: View;
@@ -12,7 +13,8 @@ export interface Route {
   tab: string;
 }
 
-const VIEWS: View[] = ["book", "section", "version", "gates", "editions", "proofs", "documents"];
+const VIEWS: View[] = ["book", "section", "version", "gates", "editions", "proofs", "documents", "style",
+  "continuity", "jobs"];
 
 export function parse(hash: string, fallbackLanguage: string): Route {
   const query = new URLSearchParams(hash.replace(/^#\/?/, ""));
