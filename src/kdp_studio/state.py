@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -78,8 +77,8 @@ def book_lock(root: Path) -> Iterator[None]:
 
 
 def commit_state(root: Path, state: dict[str, Any], *, expected_revision: int | None,
-                 message: str, actor: Actor) -> dict[str, Any]:
-    """Write a new revision atomically. The caller holds ``book_lock``."""
+                 message: str, actor: Actor, also: tuple[Path, ...] = ()) -> dict[str, Any]:
+    """Write a new revision atomically, and commit it with ``also``. The caller holds ``book_lock``."""
 
     current = read_state(root)
     if expected_revision is not None and expected_revision != current["revision"]:
@@ -91,13 +90,7 @@ def commit_state(root: Path, state: dict[str, Any], *, expected_revision: int | 
         json.dump(state, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
     os.replace(temporary, path)
-    _git_commit(root, message, actor)
+    from .history import commit
+
+    commit(root, [path, *also], message, actor)
     return state
-
-
-def _git_commit(root: Path, message: str, actor: Actor) -> None:
-    if not (root / ".git").exists():
-        return
-    subprocess.run(["git", "add", STATE_FILENAME], cwd=root, capture_output=True)
-    subprocess.run(["git", "commit", "-q", "-m", f"{message}\n\nActor: {actor.id} ({actor.kind})",
-                    "--", STATE_FILENAME], cwd=root, capture_output=True)

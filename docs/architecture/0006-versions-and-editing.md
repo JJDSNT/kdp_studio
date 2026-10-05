@@ -1,6 +1,6 @@
 # ADR 0006: Text versions are candidates; a person's edit is written byte for byte
 
-Status: accepted direction (2026-10-04); not implemented yet.
+Status: accepted (2026-10-04); implemented in milestone 2 (`versions.py`, the control room).
 
 ## Context
 

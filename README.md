@@ -40,6 +40,7 @@ The check says so, with the measured value beside the requirement.
 | `kdp check <book>` | measured verdicts against KDP and EPUB requirements |
 | `kdp gate open/approve/changes/reject` | human gates, recorded in the book |
 | `kdp compare <before> <after>` | fidelity: did the words change? (Markdown or PDF) |
+| `kdp serve <book> [--assistant]` | the control room in the browser, with the assistant |
 
 ## Why this exists
 
@@ -94,6 +95,33 @@ KDP Studio never rewrites a file the author wrote. Its decisions go to
 `state.json`, and when the book is a git repository each one is a commit with
 its actor and reason.
 
+## The control room
+
+```bash
+uv sync --all-extras && make ui          # once: Python extras, then the interface (Node 20+)
+uv run kdp serve ~/books/my-book --assistant
+```
+
+A local interface over the same commands as the CLI:
+
+- **the book**: structure, words, candidate versions, waiting gates;
+- **a section**: the text as the ebook renders it, an editor that saves
+  byte for byte (refused if the file changed since it was opened), its
+  versions and its git history;
+- **a version**: a candidate rewrite beside the current text, only the changed
+  paragraphs, with the fidelity report — and Adopt or Reject, with a reason;
+- **gates**, decided with their rationale; **editions**, built and measured;
+  **pages**, the print interior rasterised to look at.
+
+**The assistant** is a LangGraph agent served to the page through CopilotKit
+(a CoAgent). It knows what you are looking at, reads the book when it needs
+to, and can take your screen to a chapter or a version. When it wants to write
+something into the book — a candidate version, a gate to open — it asks first,
+in the chat; on your yes it acts as an agent, and the history says so. It never
+decides a gate and never adopts a version. The model is your own Claude Code
+login by default (`claude -p`, no key stored); `KDP_MODEL=claude-api` uses the
+API instead.
+
 ## Edition templates
 
 How a book looks is a template chosen by name in `book.yaml`, one for print and
@@ -109,7 +137,7 @@ in. See [docs/templates.md](docs/templates.md).
 ## Architecture
 
 ```
- CLI │ control room (planned) │ agents (planned)
+ CLI │ control room │ assistant (LangGraph, via CopilotKit)
                   │
         commands │ queries
                   │
@@ -134,10 +162,13 @@ decisions in [`docs/architecture/`](docs/architecture/).
 
 ## Status
 
-The first milestone is delivered: the book format, the migration of *A Era dos
-Agentes* with a fidelity audit, the print and ebook builds, measured KDP and
-EPUB checks, human gates and the fidelity auditor. The control room, the agents
-and the rest of the pipeline are on the [roadmap](ai-context/roadmap.md).
+Two milestones are delivered. The first: the book format, the migration of *A
+Era dos Agentes* with a fidelity audit, the print and ebook builds, measured
+KDP and EPUB checks, human gates and the fidelity auditor. The second: the
+control room, text versions and byte-for-byte editing, and the editorial
+assistant as a CopilotKit CoAgent. The specialised agents (research, writing,
+revision, translation, cover) and the rest of the pipeline are on the
+[roadmap](ai-context/roadmap.md).
 
 ## License
 

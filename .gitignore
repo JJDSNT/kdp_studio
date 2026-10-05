@@ -5,3 +5,5 @@ __pycache__/
 .env
 examples/*/builds/
 examples/*/state.json
+src/kdp_studio/web_assets/
+frontend/node_modules/

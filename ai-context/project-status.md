@@ -10,7 +10,8 @@ updated_at: 2026-10-04
 
 # Project status
 
-**Phase:** milestone 1 delivered — the book stands on its own in KDP Studio.
+**Phase:** milestones 1 and 2 delivered — the book stands on its own, and the
+author works on it in the control room with the assistant.
 
 ## Delivered
 
@@ -33,10 +34,18 @@ updated_at: 2026-10-04
   original untouched): 25 sections, fidelity audit clean, 156 pages, every
   measured KDP check passing.
 
+- Milestone 2 (ADR 0006, ADR 0007): `kdp serve` control room (book, section
+  read/edit/versions/history, version comparison with fidelity, gates,
+  editions with measured checks, page proofs, documents); candidate versions
+  and byte-for-byte editing with git commits; the single command boundary
+  (`commands.py`) with the agent's narrower set; the editorial assistant
+  (LangGraph CoAgent through CopilotKit v2, model through the Claude Code CLI
+  or the API).
+
 ## Next action
 
-Milestone 2 (roadmap): the control room and the version model (ADR 0006),
-then the agents (milestone 3).
+Milestone 3: the specialised agents behind the assistant, starting with the
+voice reviser (the vice catalogue as checks) and the interviewer.
 
 ## Risks and gaps
 

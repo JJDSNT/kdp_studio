@@ -11,10 +11,8 @@ from pathlib import Path
 
 from . import catalog, doctor, gates
 from .book import Book, Part, load_book
-from .build import build_dir, build_ebook, build_print, edition_settings
-from .checks import FAIL, summary
-from .checks.epub import check_epub
-from .checks.kdp_print import check_print
+from .build import build_dir, build_ebook, build_print
+from .checks import FAIL
 from .errors import KdpStudioError
 from .fidelity import compare, compare_pdfs
 from .state import Actor, read_state
@@ -93,45 +91,29 @@ def cmd_build(args) -> int:
 
 
 def cmd_check(args) -> int:
+    from .checks.run import run_checks
+
     book = load_book(args.book)
     failed = False
     for language in _languages(book, args.lang):
         for edition in _editions(args.edition):
             if edition not in book.editions:
                 continue
-            out = build_dir(book, language, edition)
-            if edition == "print":
-                pdfs = sorted(out.glob("*.pdf"))
-                if not pdfs:
-                    print(f"  print [{language}] not built — `kdp build --edition print`")
-                    failed = True
-                    continue
-                settings = edition_settings(book, "print")
-                template = catalog.get("print", settings["template"], book.root)
-                paper = template.meta["trims"][settings.get("trim", "6x9")]["paper"]
-                trim = tuple(float(v.removesuffix("in")) for v in paper)
-                findings = check_print(pdfs[0], trim=trim, bleed=pdfs[0].stem.endswith("-bleed"),
-                                       paper=settings.get("paper", "white"), log=out / "book.log")
-                target = pdfs[0]
-            else:
-                epubs = sorted(out.glob("*.epub"))
-                if not epubs:
-                    print(f"  ebook [{language}] not built — `kdp build --edition ebook`")
-                    failed = True
-                    continue
-                findings = check_epub(epubs[0])
-                target = epubs[0]
-            print(f"\n  {edition} [{language}] {target.relative_to(book.root)}")
-            for f in findings:
-                measured = f"  {f.measured}" if f.measured else ""
-                required = f"  (required {f.required})" if f.required else ""
-                print(f"    {MARK[f.verdict]}  {f.item}{measured}{required}")
-                if f.detail and f.verdict != "pass":
-                    print(f"          {f.detail}")
-            counts = summary(findings)
+            try:
+                report = run_checks(book, language, edition)
+            except KdpStudioError as error:
+                print(f"  {edition} [{language}] {error.message} — `kdp build --edition {edition}`")
+                failed = True
+                continue
+            print(f"\n  {edition} [{language}] {report['target']}")
+            for f in report["findings"]:
+                measured = f"  {f['measured']}" if f["measured"] else ""
+                required = f"  (required {f['required']})" if f["required"] else ""
+                print(f"    {MARK[f['verdict']]}  {f['item']}{measured}{required}")
+                if f["detail"] and f["verdict"] != "pass":
+                    print(f"          {f['detail']}")
+            counts = report["summary"]
             print("    " + ", ".join(f"{v} {k}" for k, v in sorted(counts.items())))
-            (out / "check.json").write_text(json.dumps([f.public_dict() for f in findings], ensure_ascii=False,
-                                                       indent=2), encoding="utf-8")
             failed |= counts.get(FAIL, 0) > 0
     return 1 if failed else 0
 
@@ -172,6 +154,37 @@ def cmd_compare(args) -> int:
     return 0 if report.ok else 1
 
 
+def cmd_serve(args) -> int:
+    import socket
+
+    import uvicorn
+
+    from .server import create_app
+
+    root = load_book(args.book).root
+    copilot_url, reason = "", ""
+    if args.assistant:
+        from .assistant.host import AssistantHost, unavailable_reason
+
+        reason = unavailable_reason()
+        if reason:
+            print(f"  assistant off: {reason}")
+        else:
+            def free_port() -> int:
+                with socket.socket() as probe:
+                    probe.bind(("127.0.0.1", 0))
+                    return probe.getsockname()[1]
+
+            host = AssistantHost(root, free_port(), free_port())
+            host.start()
+            copilot_url = host.copilot_url
+            print("  assistant on (model: " + __import__("os").environ.get("KDP_MODEL", "claude-cli") + ")")
+    app = create_app(root, copilot_url=copilot_url, assistant_reason=reason)
+    print(f"  KDP Studio: {root.name} at http://127.0.0.1:{args.port}/")
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kdp", description="KDP Studio: books from idea to KDP.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -210,6 +223,12 @@ def main(argv: list[str] | None = None) -> int:
         g.add_argument("--book", default=".")
         g.add_argument("--rationale", "-m")
     p.set_defaults(func=cmd_gate)
+
+    p = sub.add_parser("serve", help="the control room, on this machine")
+    p.add_argument("book", nargs="?", default=".")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--assistant", action="store_true", help="the LangGraph assistant through CopilotKit")
+    p.set_defaults(func=cmd_serve)
 
     p = sub.add_parser("compare", help="fidelity: did the words change? (Markdown or PDF)")
     p.add_argument("before")

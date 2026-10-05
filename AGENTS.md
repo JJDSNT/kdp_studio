@@ -35,7 +35,8 @@ its language.
 ## Validation
 
 ```bash
-uv sync --extra build
+uv sync --all-extras
+make ui                      # the control room and the Copilot Runtime (Node 20+)
 uv run pytest
 uv run flake8 src tests tools
 uv run kdp build examples/sample-book && uv run kdp check examples/sample-book

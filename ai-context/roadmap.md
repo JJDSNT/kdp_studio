@@ -16,16 +16,15 @@ is how *A Era dos Agentes* started, and it cost dearly.
 
 1. **The book stands on its own** — format, migration, builds, measured
    checks, gates, fidelity. *Delivered.*
-2. **Control room and versions** — a local web interface (Python serves; React
-   + Vite) over the same commands: the book's structure, page proofs, gates
-   decided with their candidates side by side, and the version model of ADR
-   0006 (candidate versions, word diff with the fidelity report, adoption as a
-   git commit, byte-for-byte editing with CodeMirror).
-3. **Agents** — LangGraph agents behind a model adapter (Claude Code CLI first),
-   CopilotKit v2 assistant beside the control room, the author's view as
-   context. Each agent task declares its scope; every change it proposes is a
-   candidate version audited for fidelity. Coordinator, interviewer
-   (`intentions.md`), architect, writer, voice reviser, continuity reviser.
+2. **Control room, versions and the assistant** — *Delivered.* React + Vite
+   over the commands; candidate versions, word diff with the fidelity report,
+   adoption as a git commit, byte-for-byte editing; the editorial assistant as
+   a CopilotKit CoAgent (ADR 0007).
+3. **Specialised agents** — the assistant delegating to agents with declared
+   tasks and scopes, each producing candidate versions or records:
+   interviewer (`intentions.md`), architect, writer, voice reviser (with the
+   vice catalogue), continuity reviser (whole book at once), the intention
+   guardian at every automatic gate. Long tasks run as jobs, not chat turns.
 4. **Companion** — `kdp companion`: prompt pages, `pedido.txt`, QR targets and
    the start page generated from the manuscript, replacing the legacy
    exporter; link check; one repository for several books.

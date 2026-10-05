@@ -12,8 +12,10 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 OK, MISSING = "ok", "missing"
+ASSETS = Path(__file__).with_name("web_assets")
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,16 @@ def capabilities() -> list[Capability]:
                    remedy="sudo apt install git"),
         Capability("EPUBCheck", "the reference EPUB validator", OK if shutil.which("epubcheck") else MISSING,
                    remedy="sudo apt install epubcheck"),
+        Capability("Control room", "`kdp serve`: the browser interface",
+                   OK if _module("fastapi") and (ASSETS / "app" / "index.html").is_file() else MISSING,
+                   remedy="uv sync --extra studio && make ui"),
+        Capability("Assistant", "the LangGraph assistant through CopilotKit (`kdp serve --assistant`)",
+                   OK if _module("ag_ui_langgraph") and shutil.which("node")
+                   and (ASSETS / "copilot" / "copilot-runtime.mjs").is_file() else MISSING,
+                   remedy="uv sync --extra agents && make ui (needs Node 20+)"),
+        Capability("Claude Code CLI", "the assistant's model with your own login, no key stored",
+                   OK if shutil.which("claude") else MISSING,
+                   remedy="install Claude Code, or set KDP_MODEL=claude-api with ANTHROPIC_API_KEY"),
     ]
     return caps
 
