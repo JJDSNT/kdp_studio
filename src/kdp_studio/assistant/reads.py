@@ -23,6 +23,11 @@ def overview(studio: Studio) -> str:
             for s in sections:
                 number = f"ch. {s['number']}" if s["number"] else s["kind"]
                 extra = f", {s['candidates']} candidate version(s)" if s["candidates"] else ""
+                review = s.get("review")
+                if review:
+                    extra += f", review {review['state']}" + (" but changed since" if review["changed_since"] else "")
+                elif language == data["source_language"]:
+                    extra += ", not reviewed"
                 lines.append(f"    - {s['id']} ({number}) {s['title']} — {s['words']} words{extra}")
     waiting = [g for g in data["gates"] if g["state"] == "waiting"]
     decided = [g for g in data["gates"] if g["state"] != "waiting"]

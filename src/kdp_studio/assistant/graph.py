@@ -56,6 +56,11 @@ PROPOSALS = {
     "open_gate": "open a human gate for the author to decide (needs gate_kind; subject when the kind needs one)",
     "revise_voice": "start the voice reviser on a section, as a background job (needs language, section): it "
                     "fixes the register and form findings and records a candidate version for the author",
+    "revise_section": "start the reviser on a section with the author's instruction, as a background job (needs "
+                      "language, section, `instruction` in the author's words made precise, scope): the way to "
+                      "change any text — prefer it to writing a version yourself",
+    "reorder": "move a section before/after another section or into a part (`section` and one of `before`, "
+               "`after`, `into`), or a part before/after another part (`part`); needs `rationale`",
 }
 #: Runs at once: builds are disposable and checks only measure.
 RUNS = {
@@ -69,6 +74,9 @@ SYSTEM = (
     "invent text, sources or results. When a question needs more, set `action` to `read` with `query` one of: "
     + "; ".join(f"`{n}` ({t}; needs: {needs or 'nothing'})" for n, (t, needs, _) in READS.items())
     + ". Read only what the question needs, then answer. "
+    "The author works chapter by chapter and commands through you: to change text, start the reviser with a "
+    "precise instruction rather than writing a version yourself. The voice is decided for the whole book (its "
+    "voice guide), not per chapter. Chapter approval is the author's: you may say a chapter looks ready. "
     "You cannot change the book yourself. You may propose: "
     + "; ".join(f"`{n}`: {t}" for n, t in PROPOSALS.items())
     + ". Version scopes: " + "; ".join(f"`{n}`: {t}" for n, t in SCOPES.items())
@@ -101,6 +109,11 @@ SCHEMA = {
         "rationale": {"type": "string"},
         "text": {"type": "string"},
         "gate_kind": {"type": "string", "enum": ["", *GATE_KINDS]},
+        "instruction": {"type": "string"},
+        "part": {"type": "string"},
+        "before": {"type": "string"},
+        "after": {"type": "string"},
+        "into": {"type": "string"},
         "subject": {"type": "string"},
         "navigate": {"type": "object", "properties": {
             "view": {"type": "string", "enum": ["", *VIEWS]}, "language": {"type": "string"},
@@ -165,6 +178,8 @@ def build(model: Model, studio: Studio, checkpointer=None):
                 "section": answer.get("section", ""), "scope": answer.get("scope") or "wording",
                 "rationale": answer.get("rationale", ""), "text": answer.get("text", ""),
                 "kind": answer.get("gate_kind", ""), "subject": answer.get("subject", ""),
+                "instruction": answer.get("instruction", ""),
+                **{k: answer.get(k, "") for k in ("part", "before", "after", "into")},
             }
         update["messages"] = [AIMessage(content=reply)]
         where = answer.get("navigate") or {}
@@ -190,6 +205,18 @@ def build(model: Model, studio: Studio, checkpointer=None):
             question = (f"Registrar uma versão candidata de {p['section']} ({p['language']}, escopo {p['scope']})? "
                         f"Motivo: {p['rationale'].rstrip('. ')}. Ela não muda o texto: você compara e decide depois.")
             payload = {k: p[k] for k in ("language", "section", "scope", "rationale", "text")}
+        elif p["action"] == "revise_section":
+            question = (f"Pedir ao revisor esta mudança em {p['section']} ({p['language']}, escopo {p['scope']})? "
+                        f"“{p['instruction']}”. Ele deixa uma versão candidata para você comparar.")
+            payload = {"kind": "revise_section", "payload": {"language": p["language"], "section": p["section"],
+                                                             "instruction": p["instruction"], "scope": p["scope"]}}
+        elif p["action"] == "reorder":
+            what = p["section"] or f"a parte {p['part']}"
+            where = (f"antes de {p['before']}" if p["before"] else f"depois de {p['after']}" if p["after"]
+                     else f"para o fim da parte {p['into']}")
+            question = f"Mover {what} {where}? Motivo: {p['rationale'].rstrip('. ')}."
+            payload = {k: p[k] for k in ("section", "part", "before", "after", "into") if p.get(k)}
+            payload["reason"] = p["rationale"]
         elif p["action"] == "revise_voice":
             question = (f"Pôr o revisor de voz para trabalhar em {p['section']} ({p['language']})? "
                         "Ele corrige só registro e forma e deixa uma versão candidata para você comparar.")
@@ -200,7 +227,7 @@ def build(model: Model, studio: Studio, checkpointer=None):
         answer = interrupt({"message": question, "proposal": {k: v for k, v in p.items() if k != "text"}})
         if not (isinstance(answer, dict) and answer.get("approved")):
             return {"messages": [AIMessage(content="Certo, não fiz nada.")], "proposal": {}}
-        command = "start_job" if p["action"] == "revise_voice" else p["action"]
+        command = "start_job" if p["action"] in ("revise_voice", "revise_section") else p["action"]
         try:
             result = dispatch(studio.book, command, payload, AGENT)
         except Exception as error:  # noqa: BLE001
@@ -212,8 +239,20 @@ def build(model: Model, studio: Studio, checkpointer=None):
                     "proposal": {},
                     "navigate": {"view": "version", "version": result["id"], "language": p["language"],
                                  "section": p["section"], "document": "", "id": uuid.uuid4().hex[:8]}}
-        if p["action"] == "revise_voice":
-            return {"messages": [AIMessage(content=f"O revisor de voz começou ({result['id']}). A versão aparece "
+        if p["action"] == "reorder":
+            impact = result["impact"].get(p["language"]) or next(iter(result["impact"].values()), {})
+            moved = len(impact.get("renumbered", {}))
+            refs = impact.get("references", [])
+            text = f"Feito: a ordem mudou e {moved} capítulo(s) trocaram de número."
+            if refs:
+                text += " Estas remissões agora apontam para outro capítulo:\n" + "\n".join(
+                    f"- {r['section']}:{r['line']} diz “{r['says']}”, que agora é o {r['now']}" for r in refs)
+            return {"messages": [AIMessage(content=text)], "proposal": {},
+                    "navigate": {"view": "book", "language": p["language"], "section": "", "version": "",
+                                 "document": "", "id": uuid.uuid4().hex[:8]}}
+        if p["action"] in ("revise_voice", "revise_section"):
+            who = "revisor de voz" if p["action"] == "revise_voice" else "revisor"
+            return {"messages": [AIMessage(content=f"O {who} começou ({result['id']}). A versão aparece "
                                                    "em Tarefas e nas versões do capítulo quando ficar pronta.")],
                     "proposal": {}, "navigate": {"view": "jobs", "language": p["language"], "section": "",
                                                  "version": "", "document": "", "id": uuid.uuid4().hex[:8]}}

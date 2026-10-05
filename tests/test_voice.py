@@ -75,3 +75,41 @@ def test_a_job_records_its_result_and_a_dead_runtime_marks_it_interrupted(sample
     jobs.reconcile(book)
     assert jobs.get_job(book, stuck["id"])["state"] == "interrupted"
     assert not read_state(sample).get("versions")
+
+
+class Instructed:
+    name = "instructed"
+
+    def available(self):
+        return ""
+
+    def ask(self, system, prompt, schema):
+        assert "Shorten the opening" in prompt and "[intentions.md" in prompt
+        return {"edits": [{"find": "On 12 March 1998 the workshop opened at 7 Rua Augusta, in Lisbon.",
+                           "replace": "The workshop opened in Lisbon on 12 March 1998.", "practice": "instruction",
+                           "why": "shorter"}], "skipped": [], "summary": "Shorter opening."}
+
+
+def test_the_reviser_follows_an_instruction_as_a_candidate(sample):
+    from kdp_studio.agents.reviser import revise_section
+
+    book = load_book(sample)
+    result = revise_section(book, "en", "01-first-light", "Shorten the opening", "content", model=Instructed())
+    report = version_report(book, result["version"])
+    assert report["proposed_by"]["id"] == "reviser" and report["scope"] == "content"
+    assert report["rationale"].startswith("Shorten the opening")
+    # Under `content`, the address that disappeared is reported, not hidden.
+    assert ("number", "7", 1) in [tuple(f) for f in report["fidelity"]["facts_removed"]]
+
+
+def test_the_voice_approved_on_a_pilot_chapter_guides_every_chapter(sample):
+    from kdp_studio.agents.edits import approved_voice, book_context
+    from kdp_studio.gates import decide_gate, open_gate
+
+    book = load_book(sample)
+    assert approved_voice(book) is None
+    gate = open_gate(book, "voice", "01-first-light", actor=Actor("author"))
+    decide_gate(book, gate["id"], "approved", actor=Actor("author"))
+    context = book_context(book, {})
+    assert "01-first-light — the pilot chapter whose voice the author approved for the whole book" in context
+    assert "7 Rua Augusta" in context

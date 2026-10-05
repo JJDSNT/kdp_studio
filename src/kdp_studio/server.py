@@ -61,9 +61,12 @@ class Studio:
                 key = (entry["language"], entry["section"])
                 candidates[key] = candidates.get(key, 0) + 1
 
+        reviews = gates.chapter_status(book)
+
         def section(s, language: str) -> dict[str, Any]:
             return {"type": "section", "id": s.id, "kind": s.kind, "number": s.number, "title": s.title,
-                    "toc_title": s.toc_title, "words": s.words, "candidates": candidates.get((language, s.id), 0)}
+                    "toc_title": s.toc_title, "words": s.words, "candidates": candidates.get((language, s.id), 0),
+                    "review": reviews.get(s.id) if language == book.source_language else None}
 
         languages = {}
         for language in book.languages:

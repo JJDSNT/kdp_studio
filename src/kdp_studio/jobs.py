@@ -30,8 +30,13 @@ _lock = threading.Lock()
 
 
 def store_path(book: Book) -> Path:
+    """Per book *and* location: two copies of one book never share their jobs."""
+
+    import hashlib
+
     base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
-    return Path(base) / "kdp-studio" / book.id / "jobs.json"
+    where = hashlib.sha256(str(book.root.resolve()).encode()).hexdigest()[:10]
+    return Path(base) / "kdp-studio" / f"{book.id}-{where}" / "jobs.json"
 
 
 def _read(book: Book) -> dict[str, dict[str, Any]]:

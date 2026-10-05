@@ -37,7 +37,9 @@ KINDS = {
         GateKind("intention", "Is intentions.md the author's intention, in the author's words?"),
         GateKind("material", "What happens to the existing material?"),
         GateKind("architecture", "Does the structure serve the intention?"),
-        GateKind("voice", "Is the voice right, judged on a complete, typeset pilot chapter?", needs_subject=True),
+        GateKind("voice", "Is this the book's voice? Judged on a pilot chapter (subject) or on the voice guide; "
+                          "once approved, it is the voice of the whole book"),
+        GateKind("chapter", "Is this chapter ready, as it reads now?", needs_subject=True),
         GateKind("freeze", "Freeze the text of this language?", needs_subject=True),
         GateKind("publish", "Publish this edition?", needs_subject=True),
     )
@@ -51,6 +53,13 @@ def _files(book: Book, kind: str, subject: str) -> list[Path]:
     if kind == "architecture":
         return [root / BOOK_FILENAME, book.manuscript_dir(book.source_language) / "meta.yaml"]
     if kind == "voice":
+        if subject:  # a pilot section, when the author wants voice judged on one
+            return [book.manuscript_dir(book.source_language) / f"{subject}.md"]
+        from .style import BOOK_STYLE, catalogue
+
+        _, settings = catalogue(book, book.source_language)
+        return [root / BOOK_STYLE, *[root / g for g in settings.get("guide") or []]]
+    if kind == "chapter":
         return [book.manuscript_dir(book.source_language) / f"{subject}.md"]
     if kind == "freeze":
         return sorted(book.manuscript_dir(subject).glob("*")) + [root / BOOK_FILENAME]
@@ -143,3 +152,15 @@ def gate_status(book: Book) -> list[dict[str, Any]]:
             changed = True
         out.append({**gate, "changed_since": changed})
     return sorted(out, key=lambda g: g["requested_at"])
+
+
+def chapter_status(book: Book) -> dict[str, dict[str, Any]]:
+    """Each section's review: the latest chapter gate, and whether the text moved since."""
+
+    status: dict[str, dict[str, Any]] = {}
+    for gate in gate_status(book):
+        if gate["kind"] == "chapter":
+            status[gate["subject"]] = {"gate": gate["id"], "state": gate["state"],
+                                       "changed_since": gate["changed_since"],
+                                       "decided_at": gate.get("decided_at", "")}
+    return status

@@ -110,3 +110,14 @@ td.num { text-align: right; color: var(--muted); width: 3.5em; }
 mark { background: #fbefd9; }
 .passage { font-family: ui-serif, Georgia, serif; }
 .findings td.verdict { width: 12em; text-transform: none; font-size: .8em; color: var(--warm); }
+
+.review { font-size: .72em; padding: .1em .45em; border-radius: 3px; white-space: nowrap; }
+.review.approved { background: #e3f1e8; color: var(--good); }
+.review.changed { background: #fbefd9; color: var(--warm); }
+.review.none { background: var(--soft); color: var(--muted); }
+.tick { color: var(--good); margin-left: .35em; font-size: .85em; }
+.chapter-actions { margin: .6em 0 0; }
+.ask { display: flex; gap: .5em; margin: .5em 0; }
+.ask input { flex: 1; }
+.rewritten p { margin: 0 0 .5em; }
+.rewritten del, .rewritten ins { display: block; padding: .3em .5em; border-radius: 4px; }

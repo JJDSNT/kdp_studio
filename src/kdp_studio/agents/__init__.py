@@ -5,4 +5,4 @@ with a declared scope, and what it produces is a book record -- a candidate
 version, a report -- through the same commands as everything else.
 """
 
-from . import voice  # noqa: F401 - registers its job kind
+from . import reviser, voice  # noqa: F401 - register their job kinds

@@ -43,6 +43,7 @@ The check says so, with the measured value beside the requirement.
 | `kdp style <book>` | the writing-vice catalogue, checked (with LanguageTool and Vale when configured) |
 | `kdp continuity <book>` | passages that recur across sections, read at once |
 | `kdp revise <book> <section>` | the voice reviser: a candidate version fixing register and form |
+| `kdp move <book> <section> --before/--after/--into … -m why` | reorder, with the references the move breaks |
 | `kdp tools [install <name>]` | open tools used as resources: Vale, LanguageTool, EPUBCheck |
 | `kdp serve <book> [--assistant]` | the control room in the browser, with the assistant |
 
@@ -125,6 +126,26 @@ in the chat; on your yes it acts as an agent, and the history says so. It never
 decides a gate and never adopts a version. The model is your own Claude Code
 login by default (`claude -p`, no key stored); `KDP_MODEL=claude-api` uses the
 API instead.
+
+## Working chapter by chapter
+
+The loop the tool is built around: open a chapter, ask for changes in words,
+read the candidate, adopt it or ask again, approve the chapter; move chapters
+when the order is wrong. Mostly through the assistant:
+
+- *"Revise a abertura deste capítulo: entre direto na cena."* — the reviser
+  works in the background and leaves a candidate version; the comparison
+  shows only what changed, rewritten paragraphs whole, with the fidelity
+  report and the reviser's own account of what it removed or moved.
+- *"Mova o capítulo 13 para antes do 12."* — after your yes, the order changes
+  in `book.yaml` and the assistant lists every "capítulo N" in the prose that
+  now points elsewhere.
+- **Approve chapter** records the chapter as it reads now; the book shows
+  which chapters are approved, not reviewed, or changed since approval.
+
+The voice is chosen once — on a pilot chapter or on the voice guide — and
+from then on every agent writes every chapter in it
+([ADR 0010](docs/architecture/0010-chapter-loop-commanded-by-ai.md)).
 
 ## Style, continuity and the first agent
 

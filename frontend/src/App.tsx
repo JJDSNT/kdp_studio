@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
-import { get, type BookOverview, type Info } from "./api.ts";
+import { get, type BookOverview, type Info, type SectionEntry } from "./api.ts";
 import { go, href, parse, type Route } from "./route.ts";
 import {
   BookView, ContinuityView, DocumentsView, EditionsView, GatesView, JobsView, ProofsView, SectionView, StyleView,
@@ -92,12 +92,13 @@ export default function App() {
   );
 }
 
-function TocLink({ s, route, language }: { s: { id: string; number: number; title: string; candidates: number }; route: Route; language: string }) {
+function TocLink({ s, route, language }: { s: SectionEntry; route: Route; language: string }) {
   const active = route.section === s.id && (route.view === "section" || route.view === "version");
   return (
     <a className={`toc-link ${active ? "active" : ""}`} href={href({ view: "section", language, section: s.id })}>
       <span className="num">{s.number || "·"}</span> {s.title}
       {s.candidates > 0 && <span className="dot" title={`${s.candidates} candidate version(s)`} />}
+      {s.review?.state === "approved" && !s.review.changed_since && <span className="tick" title="approved">✓</span>}
     </a>
   );
 }

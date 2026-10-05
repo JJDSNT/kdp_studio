@@ -17,7 +17,8 @@ from .state import Actor
 
 #: Commands an agent may run. Deciding a gate, adopting or rejecting a version
 #: and editing text directly are a person's.
-AGENT_COMMANDS = {"open_gate", "propose_version", "build", "check", "start_job"}
+#: Reordering changes the book's order, so the assistant asks the author first.
+AGENT_COMMANDS = {"open_gate", "propose_version", "build", "check", "start_job", "reorder"}
 
 
 def _open_gate(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
@@ -68,6 +69,20 @@ def _start_job(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
     return jobs.start(book, p["kind"], dict(p.get("payload") or {}), actor)
 
 
+def _reorder(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from .structure import move
+
+    where = {k: str(p[k]) for k in ("section", "part", "before", "after", "into") if p.get(k)}
+    return move(book, actor=actor, reason=p.get("reason", ""), **where)
+
+
+def _approve_chapter(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    """Open and decide a chapter gate in one act: the author approving what they just read."""
+
+    gate = gates.open_gate(book, "chapter", p["section"], actor=actor)
+    return gates.decide_gate(book, gate["id"], "approved", actor=actor, rationale=p.get("rationale", ""))
+
+
 COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "open_gate": _open_gate,
     "decide_gate": _decide_gate,
@@ -78,6 +93,8 @@ COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "build": _build,
     "check": _check,
     "start_job": _start_job,
+    "reorder": _reorder,
+    "approve_chapter": _approve_chapter,
 }
 
 

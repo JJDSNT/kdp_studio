@@ -243,6 +243,20 @@ def cmd_revise(args) -> int:
     return 0 if job["state"] == "done" else 1
 
 
+def cmd_move(args) -> int:
+    from .structure import move
+
+    book = load_book(args.book)
+    where = {k: v for k, v in (("before", args.before), ("after", args.after), ("into", args.into)) if v}
+    what = {"part": args.what} if args.part else {"section": args.what}
+    result = move(book, actor=_actor(), reason=args.reason, **what, **where)
+    for language, impact in result["impact"].items():
+        print(f"  [{language}] {len(impact['renumbered'])} chapter(s) renumbered")
+        for ref in impact["references"]:
+            print(f"    {ref['section']}:{ref['line']} says “{ref['says']}”, which is now {ref['now']}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kdp", description="KDP Studio: books from idea to KDP.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -300,6 +314,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("section")
     p.add_argument("--lang")
     p.set_defaults(func=cmd_revise)
+
+    p = sub.add_parser("move", help="reorder: a section (or --part) before/after another, or into a part")
+    p.add_argument("book")
+    p.add_argument("what", help="the section id (or the part id, with --part)")
+    p.add_argument("--part", action="store_true")
+    p.add_argument("--before")
+    p.add_argument("--after")
+    p.add_argument("--into", help="the part to append the section to")
+    p.add_argument("--reason", "-m", required=True)
+    p.set_defaults(func=cmd_move)
 
     p = sub.add_parser("tools", help="open tools KDP Studio uses (Vale, LanguageTool, EPUBCheck)")
     p.add_argument("action", choices=["list", "install"], nargs="?", default="list")

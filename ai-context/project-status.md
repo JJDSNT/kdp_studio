@@ -50,6 +50,12 @@ author works on it in the control room with the assistant.
   (23 infinitive enclises — the open item T3), EPUBCheck 5.4 with 0 errors and
   0 warnings, 21 recurring passages.
 
+- The chapter loop (ADR 0010): chapter gates and review status, `reorder` /
+  `kdp move` with the references a move breaks, the reviser by instruction
+  (`revise_section`), the approved pilot chapter as the voice of every agent;
+  the assistant proposes revisions and moves and asks first. Verified in a
+  headless browser on a copy of the book with the real model.
+
 ## Next action
 
 NILC-Metrix and spaCy as engines; then the continuity reviser, the

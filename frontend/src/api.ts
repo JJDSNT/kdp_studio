@@ -23,6 +23,7 @@ export interface SectionEntry {
   toc_title: string;
   words: number;
   candidates: number;
+  review: { gate: string; state: string; changed_since: boolean; decided_at: string } | null;
 }
 
 export interface PartEntry {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Editor from "./Editor.tsx";
 import {
-  get, runCommand, type BookOverview, type EditionState, type Gate, type Section, type VersionReport,
+  get, runCommand, type BookOverview, type EditionState, type Gate, type Section, type SectionEntry, type VersionReport,
 } from "./api.ts";
 import { go, href, type Route } from "./route.ts";
 
@@ -36,6 +36,7 @@ export function BookView({ book, language }: { book: BookOverview; language: str
   const words = sections.reduce((sum, s) => sum + s.words, 0);
   const candidates = sections.reduce((sum, s) => sum + s.candidates, 0);
   const waiting = book.gates.filter((g) => g.state === "waiting");
+  const reviewed = sections.filter((s) => s.review?.state === "approved" && !s.review.changed_since).length;
   return (
     <div className="page">
       <h1>{info.title}</h1>
@@ -48,13 +49,14 @@ export function BookView({ book, language }: { book: BookOverview; language: str
         <a className="card" href={href({ view: "editions", language })}>
           <strong>{Object.keys(book.editions).length}</strong> edition(s): build and measure
         </a>
+        <div className="card"><strong>{reviewed}/{sections.length}</strong> sections approved as they read now</div>
         <div className="card"><strong>{candidates}</strong> candidate version(s) to read</div>
       </div>
       <table className="contents">
         <tbody>
           {info.contents.map((entry) =>
             entry.type === "part" ? (
-              [<tr key={entry.id} className="part-row"><td colSpan={3}>
+              [<tr key={entry.id} className="part-row"><td colSpan={4}>
                 {entry.kind === "part" ? `Part ${entry.number}` : entry.kind} — {entry.title}</td></tr>,
                ...entry.sections.map((s) => <SectionRow key={s.id} s={s} language={language} />)]
             ) : <SectionRow key={entry.id} s={entry} language={language} />,
@@ -65,12 +67,20 @@ export function BookView({ book, language }: { book: BookOverview; language: str
   );
 }
 
-function SectionRow({ s, language }: { s: { id: string; number: number; title: string; words: number; candidates: number }; language: string }) {
+export function ReviewBadge({ review }: { review: SectionEntry["review"] }) {
+  if (!review) return <span className="review none">not reviewed</span>;
+  if (review.state === "approved" && review.changed_since) return <span className="review changed">changed since approval</span>;
+  if (review.state === "approved") return <span className="review approved">approved</span>;
+  return <span className="review none">{review.state.replace("_", " ")}</span>;
+}
+
+function SectionRow({ s, language }: { s: SectionEntry; language: string }) {
   return (
     <tr>
       <td className="num">{s.number || ""}</td>
       <td><a href={href({ view: "section", language, section: s.id })}>{s.title}</a>
         {s.candidates > 0 && <span className="badge">{s.candidates} version(s)</span>}</td>
+      <td><ReviewBadge review={s.review} /></td>
       <td className="num">{s.words}</td>
     </tr>
   );
@@ -87,7 +97,7 @@ export function SectionView({ route, onChanged }: { route: Route; onChanged: () 
   useEffect(() => { setDraft(null); setStatus(""); }, [route.section, route.language]);
   if (error) return <Problem text={error} />;
   if (!data) return <p className="muted">Loading…</p>;
-  const tabs = ["read", "edit", "versions", "history"];
+  const tabs = ["read", "versions", "history", "edit"];
   const dirty = draft !== null && draft !== data.text;
 
   async function save() {
@@ -109,11 +119,11 @@ export function SectionView({ route, onChanged }: { route: Route; onChanged: () 
     <div className="page">
       <p className="meta">{data.kind === "chapter" ? `Chapter ${data.number}` : data.kind} · {data.words} words · {data.section}</p>
       <h1>{data.title}</h1>
-      <div className="actions"><ReviewVoiceButton language={data.language} section={data.section} /></div>
+      <ChapterActions language={data.language} section={data.section} onChanged={() => { reload(); onChanged(); }} />
       <nav className="tabs">
         {tabs.map((tab) => (
           <a key={tab} className={route.tab === tab ? "active" : ""} href={href({ ...route, tab })}>
-            {tab}{tab === "versions" && data.versions.length ? ` (${data.versions.length})` : ""}
+            {tab === "edit" ? "edit by hand" : tab}{tab === "versions" && data.versions.length ? ` (${data.versions.length})` : ""}
           </a>
         ))}
       </nav>
@@ -204,6 +214,19 @@ export function VersionView({ route, onChanged }: { route: Route; onChanged: () 
           if (!whole && !changed) {
             return all[i - 1] && !all[i - 1].some((s) => s.op !== "equal") ? null
               : <p key={i} className="skipped">⋯</p>;
+          }
+          const changedChars = paragraph.filter((s) => s.op !== "equal").reduce((n, s) => n + s.text.length, 0);
+          const allChars = paragraph.reduce((n, s) => n + s.text.length, 0);
+          if (changed && changedChars > 0.4 * allChars) {
+            // Rewritten rather than retouched: before and after read better whole.
+            const old = paragraph.filter((s) => s.op !== "insert").map((s) => s.text).join("");
+            const now = paragraph.filter((s) => s.op !== "delete").map((s) => s.text).join("");
+            return (
+              <div key={i} className="rewritten">
+                {old.trim() && <p><del>{old}</del></p>}
+                {now.trim() && <p><ins>{now}</ins></p>}
+              </div>
+            );
           }
           return (
             <p key={i}>{paragraph.map((segment, j) => (
@@ -551,4 +574,45 @@ export function ReviewVoiceButton({ language, section }: { language: string; sec
     }
   }
   return <><button className="secondary" onClick={start}>Review voice</button>{status && <span className="problem"> {status}</span>}</>;
+}
+
+function ChapterActions({ language, section, onChanged }: { language: string; section: string; onChanged: () => void }) {
+  const book = useQuery(() => get<BookOverview>("/api/book"), [section]);
+  const [instruction, setInstruction] = useState("");
+  const [scope, setScope] = useState("content");
+  const [status, setStatus] = useState("");
+  const entry = book.data?.languages[language]?.contents
+    .flatMap((e) => (e.type === "part" ? e.sections : [e])).find((s) => s.id === section);
+
+  async function act(command: string, payload: Record<string, unknown>, then?: () => void) {
+    setStatus("");
+    try {
+      await runCommand(command, payload);
+      book.reload();
+      onChanged();
+      then?.();
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="chapter-actions">
+      <div className="actions">
+        {entry && <ReviewBadge review={entry.review} />}
+        <button onClick={() => act("approve_chapter", { section })}>Approve chapter as it reads now</button>
+        <ReviewVoiceButton language={language} section={section} />
+      </div>
+      <div className="ask">
+        <input placeholder="Ask the reviser: “tighten the opening”, “move the example to the end”…" value={instruction}
+               onChange={(e) => setInstruction(e.target.value)} />
+        <select value={scope} onChange={(e) => setScope(e.target.value)}>
+          <option value="wording">wording</option><option value="content">content</option><option value="structure">structure</option>
+        </select>
+        <button className="secondary" disabled={!instruction.trim()} onClick={() => act("start_job",
+          { kind: "revise_section", payload: { language, section, instruction, scope } }, () => go({ view: "jobs", language }))}>Revise</button>
+      </div>
+      {status && <p className="problem">{status}</p>}
+    </div>
+  );
 }
