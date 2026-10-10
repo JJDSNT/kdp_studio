@@ -58,11 +58,14 @@ is how *A Era dos Agentes* started, and it cost dearly.
    writes its record (after Cine Toaster's providers); illustrations placed
    in the text; case-bound wraps.
 10. **Ingestion, diagnosis and mapping** (modes B and C) — any existing
-    material, catalogued and mapped (keep, revise, rewrite, move, discard,
+    material (the first to try: the author's ODT book in
+    `JJDSNT/pipeline-de-publicacao`, whose pandoc conversion and ordering of
+    chapters into parts are the starting point, KS-0008), catalogued and mapped (keep, revise, rewrite, move, discard,
     preserve) against the intention; mode C at 100% fidelity.
 11. **KDP package and publishing** — metadata, categories, keywords,
-    description, the publish gate; manual upload package when no integration
-    exists.
+    description, the publish gate, shown on the Readiness page; a manual
+    upload package, since no public upload interface was found (browser
+    automation exists and is brittle; not a path to depend on).
 12. **Marketing** — positioning, sales copy, launch calendar.
 
 13. **Fiction** (not the current focus; the author's suggestion) — from Cine

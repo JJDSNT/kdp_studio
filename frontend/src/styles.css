@@ -136,3 +136,13 @@ header nav { flex-wrap: wrap; }
 .reader .device { margin: 1em auto; border: 10px solid #23282d; border-radius: 14px; background: white; }
 .reader .device iframe { display: block; width: 100%; height: 76vh; border: 0; background: white; }
 .book-title { color: inherit; }
+/* The menu follows the work: a stage in the header, its views in a row under it. */
+header nav { align-items: center; }
+header nav a.stage { padding: .25em .7em; border-radius: 999px; text-transform: none; }
+header nav a.stage.active { background: var(--deep); color: white; }
+header nav .apart { width: 1px; height: 1.4em; background: #0002; }
+.room { grid-template-rows: auto auto 1fr; }
+.stage-views { grid-column: 1 / -1; display: flex; gap: 1.3em; padding: .45em 1.2em; background: var(--soft);
+  border-bottom: 1px solid #0001; font-size: .92em; }
+.stage-views a { color: var(--muted); text-transform: capitalize; }
+.stage-views a.active { color: var(--deep); font-weight: 600; }

@@ -3,7 +3,7 @@
 
 export type View = "book" | "section" | "version" | "gates" | "editions" | "proofs" | "documents" | "style"
   | "continuity" | "jobs" | "plan" | "research" | "translation"
-  | "reader" | "templates" | "library";
+  | "reader" | "templates" | "library" | "publish";
 
 export interface Route {
   view: View;
@@ -16,7 +16,26 @@ export interface Route {
 
 const VIEWS: View[] = ["book", "section", "version", "gates", "editions", "proofs", "documents", "style",
   "continuity", "jobs", "plan", "research", "translation", "reader",
-  "templates", "library"];
+  "templates", "library", "publish"];
+
+/** The views by stage of the work, in the order a book goes through them. */
+export const STAGES: { id: string; label: string; views: View[] }[] = [
+  { id: "write", label: "Plan & write", views: ["book", "research", "plan", "documents"] },
+  { id: "review", label: "Review", views: ["style", "continuity", "translation"] },
+  { id: "produce", label: "Produce", views: ["templates", "editions", "proofs", "reader"] },
+  { id: "publish", label: "Publish", views: ["publish"] },
+];
+
+export const VIEW_LABELS: Partial<Record<View, string>> = {
+  book: "Chapters", plan: "Plan", documents: "Documents", editions: "Editions & cover", proofs: "Print pages",
+  reader: "Ebook reader", publish: "Readiness",
+};
+
+export function stageOf(view: View): string {
+  // A chapter and its versions are where writing happens.
+  if (view === "section" || view === "version") return "write";
+  return STAGES.find((stage) => stage.views.includes(view))?.id || "";
+}
 
 export function parse(hash: string, fallbackLanguage: string): Route {
   const query = new URLSearchParams(hash.replace(/^#\/?/, ""));

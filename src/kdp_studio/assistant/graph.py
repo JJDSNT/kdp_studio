@@ -49,6 +49,7 @@ VIEWS = {
     "translation": "a translated language against its source (needs language = the translated one)",
     "reader": "the built ebook, read as on a device", "templates": "the edition templates and publisher profiles",
     "library": "the other books that can be opened",
+    "publish": "what stands between a language and the publisher: freeze, builds, checks, the decision",
 }
 
 #: Changes it may propose; each is a command, confirmed by the author first.

@@ -27,11 +27,31 @@ ebook. ADR 0014.
 - The assistant shares the runtime's Studio and keeps one conversation per
   book.
 
+- The menu follows the work (the author's suggestion): four stages in the
+  header — Plan & write, Review, Produce, Publish — each with its views in a
+  row under it; Gates (with the number waiting) and Jobs stay beside them
+  because they cut across every stage. Publish has a Readiness page per
+  language, read from records that already exist: translation, the freeze
+  gate, each edition built and measured, the publish decision.
+
 # Validation
 
 75 tests pass (a second book opened, the catalogue, the EPUB read page by
 page); flake8 clean; the frontend builds. The three views opened in a
 headless browser on a copy of *A Era dos Agentes* with `--library ~/books`.
+
+# Looked at and not adopted
+
+`JJDSNT/pipeline-de-publicacao` (the author's earlier pipeline, 2025): ODT →
+Markdown through pandoc, then HTML, EPUB, LaTeX and FODT, with a manifest
+ordering chapters into parts, for the book *Liderando a Transformação
+Digital*. Its EPUB, LaTeX and EPUBCheck parts are superseded here. Worth
+bringing when ingestion (roadmap 10) is built: the pandoc ODT conversion with
+its heading fix, the ordering of numbered files into parts, its list of
+front and back matter (half title, dedication, epigraph, acknowledgements,
+glossary, about the author) — and that book itself, as the first existing
+manuscript to ingest. No public KDP upload interface was found (2026-10-10):
+what exists on GitHub prepares files or drives the browser.
 
 # Remaining
 

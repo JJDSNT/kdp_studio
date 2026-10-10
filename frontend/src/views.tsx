@@ -1009,3 +1009,59 @@ export function ReaderView({ language }: { language: string }) {
     </div>
   );
 }
+
+// --------------------------------------------------------------- publish
+
+export function PublishView({ book, language }: { book: BookOverview; language: string }) {
+  const { data, error } = useQuery(() => get<Record<string, EditionState>>("/api/editions", { lang: language }), [language]);
+  if (error) return <Problem text={error} />;
+  if (!data) return <p className="muted">Loading…</p>;
+  const decided = (kind: string, subject: string) =>
+    book.gates.filter((g) => g.kind === kind && g.subject === subject).slice(-1)[0];
+  const frozen = decided("freeze", language);
+  const isFrozen = frozen?.state === "approved" && !frozen.changed_since;
+  const sections = book.languages[language].contents.flatMap((e) => (e.type === "part" ? e.sections : [e]));
+  const untranslated = sections.filter((s) => s.translation && s.translation !== "translated").length;
+  const rows: { item: string; ok: boolean; note: string; to?: string }[] = [];
+  if (language !== book.source_language) {
+    rows.push({ item: "Translation", ok: untranslated === 0, to: href({ view: "translation", language }),
+      note: untranslated ? `${untranslated} of ${sections.length} sections not translated, or stale` : "every section translated from the current source" });
+  }
+  rows.push({ item: "Text frozen", ok: isFrozen, to: href({ view: "gates", language }),
+    note: isFrozen ? `frozen by ${frozen.decided_by?.id}` : frozen?.changed_since ? "the text changed after it was frozen" : `no freeze gate approved for ${language}` });
+  for (const [edition, state] of Object.entries(data)) {
+    const counts = state.check?.summary || {};
+    const fails = counts.fail || 0;
+    rows.push({ item: `${edition} built and measured`, ok: !!state.built && !!state.check && fails === 0,
+      to: href({ view: "editions", language }),
+      note: !state.built ? "not built" : !state.check ? "built, not measured"
+        : `${state.built} — ${Object.entries(counts).map(([k, v]) => `${v} ${k.replace("_", " ")}`).join(", ")}` });
+  }
+  for (const edition of Object.keys(data).filter((e) => e !== "cover")) {
+    const gate = decided("publish", `${language}/${edition}`) || decided("publish", language);
+    rows.push({ item: `Decision to publish the ${edition} edition`, ok: gate?.state === "approved" && !gate.changed_since,
+      to: href({ view: "gates", language }), note: gate ? `${gate.state}${gate.changed_since ? ", but the files changed since" : ""}` : "no publish gate decided" });
+  }
+  const ready = rows.every((r) => r.ok);
+  return (
+    <div className="page">
+      <h1>Readiness — {language}</h1>
+      <p className="muted">What stands between this language and the publisher, read from the book's own records. The order
+        matters: freeze the text, build and measure the interior, then the cover (every page changes its spine), then decide.</p>
+      <table className="findings">
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.item} className={r.ok ? "pass" : "warn"}>
+              <td className="verdict">{r.ok ? "ready" : "open"}</td>
+              <td>{r.to ? <a href={r.to}>{r.item}</a> : r.item}</td>
+              <td className="muted">{r.note}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p>{ready ? "Everything measured here is ready." : "Not ready yet: the open lines above say what is missing."}</p>
+      <p className="muted">KDP Studio does not upload: the files go to the publisher's site by hand. They are in <code>builds/{language}/</code>; the metadata package (categories, keywords,
+        description) is not generated yet.</p>
+    </div>
+  );
+}

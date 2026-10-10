@@ -1,9 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { get, type BookOverview, type Info, type SectionEntry } from "./api.ts";
-import { go, href, parse, type Route } from "./route.ts";
+import { STAGES, VIEW_LABELS, go, href, parse, stageOf, type Route } from "./route.ts";
 import {
   BookView, ContinuityView, DocumentsView, EditionsView, GatesView, JobsView, LibraryView, PlanView, ProofsView,
-  ReaderView, ResearchView, SectionView, StyleView, TemplatesView, TranslationView, VersionView, useQuery,
+  PublishView, ReaderView, ResearchView, SectionView, StyleView, TemplatesView, TranslationView, VersionView, useQuery,
 } from "./views.tsx";
 import type { Navigation } from "./Assistant.tsx";
 
@@ -37,6 +37,8 @@ export default function App() {
   const language = data.languages[route.language] ? route.language : data.source_language;
   const contents = data.languages[language].contents;
   const assistant = info.data?.assistant;
+  const waiting = data.gates.filter((g) => g.state === "waiting").length;
+  const stage = STAGES.find((s) => s.id === stageOf(route.view));
 
   return (
     <div className={`room ${assistant && assistantOpen ? "with-assistant" : ""}`}>
@@ -45,9 +47,14 @@ export default function App() {
         <a className="book-title" href={href({ view: "library", language })} title="Open another book">
           {data.languages[language].title} ▾</a>
         <nav>
-          {(["book", "research", "plan", "style", "continuity", "translation", "gates", "jobs", "editions", "proofs", "reader", "templates", "documents"] as const).map((view) => (
-            <a key={view} className={route.view === view ? "active" : ""} href={href({ view, language })}>{view}</a>
+          {STAGES.map((stage) => (
+            <a key={stage.id} className={`stage ${stageOf(route.view) === stage.id ? "active" : ""}`}
+              href={href({ view: stage.views[0], language })}>{stage.label}</a>
           ))}
+          <span className="apart" />
+          <a className={route.view === "gates" ? "active" : ""} href={href({ view: "gates", language })}>
+            Gates{waiting > 0 && <span className="badge">{waiting}</span>}</a>
+          <a className={route.view === "jobs" ? "active" : ""} href={href({ view: "jobs", language })}>Jobs</a>
         </nav>
         <select value={language} onChange={(e) => go({ ...route, language: e.target.value })}>
           {Object.keys(data.languages).map((l) => <option key={l}>{l}</option>)}
@@ -60,6 +67,14 @@ export default function App() {
           <span className="muted" title={info.data?.assistant_reason}>assistant off</span>
         )}
       </header>
+      {stage && stage.views.length > 1 && (
+        <div className="stage-views">
+          {stage.views.map((view) => (
+            <a key={view} className={route.view === view ? "active" : ""} href={href({ view, language })}>
+              {VIEW_LABELS[view] || view}</a>
+          ))}
+        </div>
+      )}
       <aside className="toc">
         {contents.map((entry) =>
           entry.type === "part" ? (
@@ -85,6 +100,7 @@ export default function App() {
         {route.view === "reader" && <ReaderView language={language} />}
         {route.view === "templates" && <TemplatesView />}
         {route.view === "library" && <LibraryView />}
+        {route.view === "publish" && <PublishView book={data} language={language} />}
         {route.view === "plan" && <PlanView book={data} language={language} onChanged={book.reload} />}
         {route.view === "research" && <ResearchView language={language} />}
       </main>
