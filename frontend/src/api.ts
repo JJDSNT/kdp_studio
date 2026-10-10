@@ -118,6 +118,8 @@ export interface EditionState {
   settings: Record<string, unknown>;
   built: string;
   built_at: number;
+  /** For a cover: the pictures to look at. */
+  images: string[];
   check: { target: string; findings: Finding[]; summary: Record<string, number> } | null;
 }
 

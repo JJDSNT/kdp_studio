@@ -22,6 +22,7 @@ contents:                        # the reading order, language-neutral
 editions:
   print: {template: nocturne, trim: 6x9, paper: white, bleed: true}
   ebook: {template: nocturne}
+  cover: {template: nocturne, art: horizon, focus: [0.6, 0.6], publisher: kdp}
 exercises:
   url: "https://jjdsnt.github.io/books_resources/era/{language}/{id}"
 design:
@@ -45,6 +46,13 @@ labels: {exercise: Experimente}  # overrides of the built-in labels
 colophon: |                      # Markdown; the copyright page
   © 2026 Jaime Dias. …
 description: …                   # sales copy (ebook metadata)
+cover:                           # the words of the cover, beyond title and author
+  title: [A Era dos, Agentes]    # how the title breaks; default: before its last word
+  line: Como a inteligência artificial está aprendendo a trabalhar por nós
+  back: |                        # back-cover copy, Markdown
+    …
+  about: |                       # about the author, Markdown
+    …
 ```
 
 ## A section: `manuscript/<language>/<id>.md`
@@ -139,13 +147,43 @@ guide: [editorial/07-localizacao.md]   # the book's notes, read by the translato
 A term used in a source section and absent from its translation is reported;
 a kept name must appear the same number of times.
 
+## Cover and art
+
+A cover is art plus words. `art/<id>.<ext>` is a picture of the book — cover
+art, an illustration — and `art/<id>.yaml` records how it was made:
+
+```yaml
+purpose: cover            # cover | illustration
+lettering: none           # none | baked (the picture carries words)
+prompt: a planet's edge at dawn, no text, no letters
+model: …                  # with provider and seed, when a model made it
+derived_from: …           # the art id it was made from
+width: 1900
+height: 2850
+digest: …
+```
+
+`kdp art add` writes both; nothing is replaced, so another attempt is another
+id. Art for a cover carries no lettering: image models misspell, and words
+drawn into a picture cannot be corrected or translated. Every word is set by
+the cover template from `meta.yaml`, so one picture serves every language.
+
+`editions.cover` names the template, the art (optional: a cover may be
+typographic), the `focus` the crop keeps (fractions of the picture's width and
+height) and the publisher profile (docs/templates.md). `kdp build --edition
+cover` writes the ebook cover and, once the print interior is built, the wrap
+sized for its page count. An ebook cover the author supplies as
+`cover/<language>/ebook.jpg` wins over the built one.
+
 ## Other directories
 
 | Path | Contents |
 |---|---|
 | `intentions.md` | the author's intention, in the author's words; wins every conflict |
 | `editorial/` | the author's editorial documents, free-form |
-| `cover/<language>/` | cover art; `ebook.jpg` is the ebook cover |
+| `art/` | pictures with their records (above) |
+| `cover/<language>/` | a finished cover supplied by the author; `ebook.jpg` is the ebook cover |
+| `publishers/<name>.yaml` | the book's own publisher profiles |
 | `companion/<language>/` | material published beside the book, not in it |
 | `experiments/` | records of exercises actually run |
 | `archive/` | earlier drafts and retired material, kept for provenance |

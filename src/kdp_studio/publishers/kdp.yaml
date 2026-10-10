@@ -1,0 +1,24 @@
+# What Amazon KDP asks of a cover (paperback, black-and-white interior, and
+# the Kindle cover). Inches unless said otherwise. A book chooses a profile
+# under `editions.cover.publisher`; its own profiles live in
+# `<book>/publishers/<name>.yaml`.
+name: kdp
+title: Amazon KDP — paperback and Kindle
+# Ink past the trim on the three outer edges of the wrap.
+bleed: 0.125
+# Spine width = base + pages × per_page[paper].
+spine:
+  base: 0
+  per_page: {white: 0.002252, cream: 0.0025}
+# No text on a spine thinner than this many pages; text keeps `margin` clear
+# on each side.
+spine_text: {min_pages: 100, margin: 0.0625}
+# The barcode the printer adds on the back cover: its size, and how far it
+# sits from the spine and from the foot. Nothing may be set there.
+barcode: {size: [2.0, 1.2], from_spine: 0.25, from_foot: 0.25}
+# Words keep at least this distance from the trim.
+safe: 0.125
+# Pictures on the printed cover.
+dpi: 300
+# The ebook cover, in pixels.
+ebook: {pixels: [1600, 2560], max_megabytes: 50}

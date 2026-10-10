@@ -14,5 +14,6 @@ contents:
 editions:
   print: {template: nocturne, trim: 6x9, paper: cream, bleed: true}
   ebook: {template: nocturne}
+  cover: {template: nocturne}    # a typographic cover: no art
 exercises:
   url: "https://example.org/sample/{language}/{id}"

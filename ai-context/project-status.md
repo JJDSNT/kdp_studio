@@ -74,12 +74,20 @@ control room with the assistant, and it can be translated section by section.
   glossary drafted, chapter 4 translated, the English print and ebook built
   and measured.
 
+- Covers (ADR 0013): art as records without lettering (`art/`, `kdp art`),
+  the `nocturne` cover template setting every word from `meta.yaml`, publisher
+  profiles for the sizes (`publishers/kdp.yaml`, a book's own), the ebook cover
+  and the print wrap from one design, and the cover check (a wrap built for
+  another page count fails). Verified on the sample book and on a copy of
+  *A Era dos Agentes* in both languages, with a stand-in picture.
+
 ## Next action
 
 On *A Era dos Agentes* itself, the author's acts: `kdp language add … en`,
-read the glossary, read one translated chapter, then the rest. In the tool:
-the companion (`kdp companion`, with the `/en/` pages the QR codes point to)
-and the cover per language, which the four KDP products need; then
+read the glossary, read one translated chapter, then the rest; and lettering-
+free cover art at 300 dpi, registered with `kdp art add`. In the tool: an
+image provider adapter (art generated and recorded), then the companion
+(`kdp companion`, with the `/en/` pages the QR codes point to); then
 NILC-Metrix and spaCy as engines and the rest of milestone 3.
 
 ## Risks and gaps
@@ -88,12 +96,13 @@ NILC-Metrix and spaCy as engines and the rest of milestone 3.
   `kdp companion` exists the public `books_resources` must not be regenerated
   from the migrated book.
 - Transparency in the PDF is not measured.
-- A translated language has no cover and no companion pages yet: the English
-  ebook builds without a cover, and its QR codes point to `/en/` addresses
-  that do not exist until the companion is generated.
+- A translated language has no companion pages yet: its QR codes point to
+  `/en/` addresses that do not exist until the companion is generated.
+- The book's only cover art has its words drawn in by a model and is 1024 ×
+  1536; the cover template needs art without lettering, larger.
+- Art cannot be generated from inside KDP Studio yet, and "no lettering" is
+  declared, not detected.
 - Translation checks cannot see a number written out in words, and the
   English style catalogue has few register rules.
-- The book has no ebook cover at 1600 × 2560 yet (`cover/pt-BR/art.jpeg` is
-  1024 × 1536).
 - The fact inventory's proper-name pattern is heuristic: it can over-report,
   never silently pass a changed number, URL or code span.

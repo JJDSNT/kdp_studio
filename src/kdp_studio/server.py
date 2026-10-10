@@ -128,8 +128,12 @@ class Studio:
         out = {}
         for edition, settings in book.editions.items():
             folder = build_dir(book, language, edition)
-            built = sorted(folder.glob("*.pdf")) + sorted(folder.glob("*.epub"))
+            built = sorted(folder.glob("*.pdf")) + sorted(folder.glob("*.epub")) + sorted(folder.glob("*-cover-*.jpg"))
             out[edition] = {"settings": settings,
+                            # What to look at: the ebook cover, and the wrap as a picture.
+                            "images": [p.name for p in (*sorted(folder.glob("*-cover-ebook.jpg")),
+                                                        folder / "preview-print.png")
+                                       if edition == "cover" and p.is_file()],
                             "built": str(built[0].relative_to(book.root)) if built else "",
                             "built_at": built[0].stat().st_mtime if built else 0,
                             "check": last_report(book, language, edition)}
@@ -142,6 +146,12 @@ class Studio:
         path = proofs.interior(self.book, language).parent / "proofs" / name
         if not path.is_file() or path.suffix != ".png" or "/" in name:
             raise NotFoundError(f"No proof {name!r}")
+        return path
+
+    def cover_image(self, language: str, name: str) -> Path:
+        path = build_dir(self.book, language, "cover") / name
+        if "/" in name or path.suffix not in (".jpg", ".png") or not path.is_file():
+            raise NotFoundError(f"No cover image {name!r}")
         return path
 
     def document(self, relative: str) -> dict[str, Any]:
@@ -229,6 +239,16 @@ def create_app(root: Path, *, copilot_url: str = "", assistant_reason: str = "")
     @app.get("/proofs/{lang}/{name}")
     def proof(lang: str, name: str):
         return FileResponse(studio.proof_path(lang, name), media_type="image/png")
+
+    @app.get("/covers/{lang}/{name}")
+    def cover_image(lang: str, name: str):
+        return FileResponse(studio.cover_image(lang, name))
+
+    @app.get("/api/art")
+    def art_list():
+        from . import art
+
+        return art.records(studio.book)
 
     @app.get("/api/documents")
     def documents():

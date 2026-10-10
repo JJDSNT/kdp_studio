@@ -17,7 +17,7 @@ import yaml
 
 from .errors import NotFoundError
 
-KINDS = ("print", "ebook")
+KINDS = ("print", "ebook", "cover")
 
 
 @dataclass(frozen=True)

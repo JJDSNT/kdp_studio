@@ -379,6 +379,13 @@ export function EditionsView({ language }: { language: string }) {
             <button className="secondary" disabled={!!busy || !state.built} onClick={() => act("check", edition)}>Check again</button>
             {edition === "print" && state.built && <a href={href({ view: "proofs", language })}>Look at the pages →</a>}
           </div>
+          {state.images.length > 0 && (
+            <div className="covers">
+              {state.images.map((name) => (
+                <a key={name} href={`/covers/${language}/${name}?t=${state.built_at}`} target="_blank" rel="noreferrer">
+                  <img src={`/covers/${language}/${name}?t=${state.built_at}`} alt={name} /></a>))}
+            </div>
+          )}
           {state.check && (
             <table className="findings">
               <tbody>

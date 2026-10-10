@@ -130,3 +130,5 @@ mark { background: #fbefd9; }
 .promise { color: var(--good); }
 .empty { background: white; border: 1px dashed var(--line); border-radius: 6px; padding: 1em 1.4em; margin: 1em 0; }
 header nav { flex-wrap: wrap; }
+.covers { display: flex; gap: 1em; align-items: flex-end; margin: .8em 0; }
+.covers img { height: 260px; border: 1px solid var(--rule, #ddd); }

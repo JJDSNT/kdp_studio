@@ -27,6 +27,17 @@ def run_checks(book: Book, language: str, edition: str) -> dict[str, Any]:
         target = pdfs[0]
         findings = check_print(target, trim=trim, bleed=target.stem.endswith("-bleed"),
                                paper=settings.get("paper", "white"), log=out / "book.log")
+    elif edition == "cover":
+        from ..cover import built_report
+        from .cover import check_cover
+
+        built = built_report(book, language)
+        target = out / (built["print"] or built["ebook"])["file"]
+        findings = check_cover(book, language, out, built)
+        report = {"edition": edition, "language": language, "target": str(target.relative_to(book.root)),
+                  "findings": [f.public_dict() for f in findings], "summary": summary(findings)}
+        (out / "check.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        return report
     else:
         epubs = sorted(out.glob("*.epub"))
         if not epubs:

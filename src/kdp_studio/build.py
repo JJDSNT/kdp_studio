@@ -230,7 +230,9 @@ def _ebook_cover(book: Book, language: str) -> Path | None:
         path = book.root / "cover" / language / name
         if path.is_file():
             return path
-    return None
+    # No cover supplied by the author: the one the cover template built, if any.
+    built = sorted(build_dir(book, language, "cover").glob("*-cover-ebook.jpg"))
+    return built[0] if built else None
 
 
 def _nav(documents, heading: str, language: str) -> str:

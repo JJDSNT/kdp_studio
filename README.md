@@ -45,6 +45,8 @@ The check says so, with the measured value beside the requirement.
 | `kdp revise <book> <section>` | the voice reviser: a candidate version fixing register and form |
 | `kdp move <book> <section> --before/--after/--into … -m why` | reorder, with the references the move breaks |
 | `kdp new <dir> --title … --author … --idea …` | start a book from an idea |
+| `kdp build <book> --edition cover` | the ebook cover and the print wrap, sized from the trim, the page count and the publisher's profile |
+| `kdp art add/list <book>` | the book's pictures, each with how it was made |
 | `kdp language add <book> <language>` | a second language: its `meta.yaml` translated and a stub per section |
 | `kdp glossary <book> <language>` | the book's bilingual glossary; drafted by the translator when it has none |
 | `kdp translate <book> <language> [section]` | the translator: one section, or every pending one, as candidate versions |
@@ -241,7 +243,8 @@ control room, text versions and byte-for-byte editing, and the editorial
 assistant as a CopilotKit CoAgent. Since then: style checks and the voice
 reviser, the chapter loop, the path from an idea to written chapters, and a
 second language (the translator, the glossary, a translation measured against
-its source). The companion, the cover and the rest of the pipeline are on the
+its source), and the cover (words set by code over art without lettering,
+sized per publisher). The companion and the rest of the pipeline are on the
 [roadmap](ai-context/roadmap.md).
 
 ## License

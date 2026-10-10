@@ -8,3 +8,12 @@ colophon: |
   **The Sample Book** — a fixture for KDP Studio.
 
   Written for testing. No rights reserved.
+cover:
+  line: A fixture that reads like a book
+  back: |
+    A book is a directory. This one is small on purpose: it holds every
+    construct of the format once, so a change to a renderer shows on a page.
+
+    Nothing here is true, and all of it is measured.
+  about: |
+    **KDP Studio** builds books from an idea to the files a printer asks for.

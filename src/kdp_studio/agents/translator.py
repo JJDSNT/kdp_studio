@@ -26,7 +26,7 @@ from ..jobs import Progress, kind
 from ..model import Model, model_from_env
 from ..state import Actor, read_state
 from ..style import catalogue
-from ..translation import (GLOSSARY, META_TEXT, compare_translation, glossary, glossary_text, section_states)
+from ..translation import (COVER_TEXT, GLOSSARY, META_TEXT, compare_translation, glossary, glossary_text, section_states)
 from ..versions import propose_version, read_section
 from .edits import book_context
 
@@ -71,7 +71,8 @@ SCHEMA = {
 
 META_SYSTEM = (
     "You are the translator of a book. Translate what the book says about itself — title, subtitle, tagline, "
-    "part titles, the copyright page (`colophon`, Markdown) and the sales copy (`description`) — into the target "
+    "part titles, the copyright page (`colophon`, Markdown), the sales copy (`description`) and the words of the "
+    "cover (`cover_line` at the foot of the front, `cover_back` and `cover_about` on the back) — into the target "
     "language, as a publisher of that language would write them. Keep names, the author, years, ISBNs, URLs, "
     "placeholders in square brackets and inline code exactly. Part titles carry no numbering. Use the glossary. "
     "Leave a field empty when the source has none. A title is the author's decision: offer the one you would "
@@ -82,6 +83,7 @@ META_SCHEMA = {
     "type": "object",
     "properties": {
         **{key: {"type": "string"} for key in META_TEXT},
+        **{f"cover_{key}": {"type": "string"} for key in COVER_TEXT},
         "parts": {"type": "array", "items": {"type": "object", "properties": {
             "id": {"type": "string"}, "title": {"type": "string"}}, "required": ["id", "title"]}},
         "notes": {"type": "string"},
@@ -247,6 +249,9 @@ def translate_meta(book: Book, language: str, *, model: Model | None = None) -> 
 
     source = book.meta(book.source_language)
     fields = {key: source[key] for key in META_TEXT if source.get(key)}
+    cover = source.get("cover") if isinstance(source.get("cover"), dict) else {}
+    # The cover's line at the foot, back-cover copy and note about the author (Markdown).
+    fields.update({f"cover_{key}": cover[key] for key in COVER_TEXT if cover.get(key)})
     parts = {str(k): v for k, v in (source.get("parts") or {}).items()}
     _, settings = catalogue(book, language)
     prompt = (f"Translate from {book.source_language} into {language}.\n\n"
@@ -255,7 +260,10 @@ def translate_meta(book: Book, language: str, *, model: Model | None = None) -> 
               f"Author: {book.author}\n\nFields:\n{yaml.safe_dump(fields, allow_unicode=True, sort_keys=False)}\n"
               f"Parts (id: title):\n{yaml.safe_dump(parts, allow_unicode=True, sort_keys=False)}")
     answer = (model or model_from_env()).ask(META_SYSTEM, prompt, META_SCHEMA)
-    translated: dict[str, Any] = {key: answer[key] for key in fields if str(answer.get(key) or "").strip()}
+    translated: dict[str, Any] = {key: answer[key] for key in fields
+                                  if not key.startswith("cover_") and str(answer.get(key) or "").strip()}
+    translated["cover"] = {key: answer[f"cover_{key}"] for key in COVER_TEXT
+                           if cover.get(key) and str(answer.get(f"cover_{key}") or "").strip()}
     translated["parts"] = {str(p["id"]): p["title"] for p in answer.get("parts") or [] if str(p["id"]) in parts}
     return {"meta": translated, "notes": answer.get("notes", "")}
 

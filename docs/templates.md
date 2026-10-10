@@ -19,7 +19,7 @@ by colour alone. A template is good in the medium it lives in.
 
 ```yaml
 name: nocturne
-kind: print            # print | ebook
+kind: print            # print | ebook | cover
 title: Nocturne
 description: …
 engine: lualatex       # print only
@@ -75,3 +75,54 @@ capitalisation.
 
 Never put a background on `body`, and never let a distinction depend on colour
 alone.
+
+## Cover contract (LaTeX)
+
+A cover template (`templates/cover/<name>/`) sets the *words* of a cover over
+art that carries none (docs/book-format.md, "Cover and art"). One design gives
+the ebook front and the print wrap. `cover.tex.j2` uses the same delimiters as
+the print template and typesets one page; it receives:
+
+| Value | Meaning |
+|---|---|
+| `sheet.width`, `sheet.height` | the page, in inches: the ebook front, or bleed + back + spine + front + bleed |
+| `s` | the trim width over 6in: multiply type sizes and distances by it |
+| `margin` | how far words stay from the trim |
+| `at.<place>` | ready coordinates, in inches from the lower-left corner: `corner`, `art`, `author`, `title`, `line`, `spine`, `back` |
+| `art` | the picture for this sheet (already cropped, scrim baked in), or empty |
+| `front.art_width`, `front.art_height`, `front.text_width` | the front panel |
+| `title_lines`, `title`, `subtitle`, `tagline`, `author`, `line` | the words; the last title line is the one to stress |
+| `spine` | absent on the ebook; `spine.text` says whether the spine is thick enough for text, `spine.length` and `spine.band` bound it |
+| `back` | absent on the ebook; `back.width`, `back.text` and `back.about` (already LaTeX) |
+| `colors`, `labels` | as in the print template |
+
+The back-cover text must be typeset in a box whose height the template writes
+to the log as `KDP-COVER back-text-height=<dimension>`: the cover check uses it
+to say whether the text reaches the barcode. Nothing may be drawn with
+transparency; the template's `scrim` (pairs of distance from the top and
+opacity of the ground) and `edge_fade` are baked into the picture instead.
+
+A template knows nothing of a publisher: sizes arrive computed.
+
+## Publisher profiles
+
+What a publisher or printer asks of a cover is data, not code:
+`src/kdp_studio/publishers/<name>.yaml`, and a book's own in
+`<book>/publishers/<name>.yaml`, chosen by `editions.cover.publisher`
+(default `kdp`).
+
+```yaml
+title: Amazon KDP — paperback and Kindle
+bleed: 0.125                                   # inches, on the three outer edges
+spine: {base: 0, per_page: {white: 0.002252, cream: 0.0025}}
+spine_text: {min_pages: 100, margin: 0.0625}
+barcode: {size: [2.0, 1.2], from_spine: 0.25, from_foot: 0.25}
+safe: 0.125                                    # words to the trim, at least
+dpi: 300
+ebook: {pixels: [1600, 2560], max_megabytes: 50}
+```
+
+The wrap is then the book's trim (from the print edition), its page count and
+this profile: `2 × bleed + 2 × trim width + spine` by `trim height + 2 × bleed`.
+A profile describes a paperback wrap; a case-bound cover, with its turn-ins
+and hinges, needs more than these figures and is not covered yet.

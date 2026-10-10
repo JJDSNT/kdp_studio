@@ -54,7 +54,12 @@ def _reject_version(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, An
 def _build(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
     language = p.get("language") or book.source_language
     edition = p.get("edition", "print")
-    result = build_print(book, language) if edition == "print" else build_ebook(book, language)
+    if edition == "cover":
+        from .cover import build_cover
+
+        result = build_cover(book, language)
+    else:
+        result = build_print(book, language) if edition == "print" else build_ebook(book, language)
     return {"edition": edition, "language": language, "output": str(result.output.relative_to(book.root)),
             "details": result.details}
 

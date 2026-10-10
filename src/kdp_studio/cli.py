@@ -30,7 +30,8 @@ def _languages(book: Book, requested: str | None) -> list[str]:
 
 
 def _editions(requested: str) -> list[str]:
-    return ["print", "ebook"] if requested == "all" else [requested]
+    # The wrap needs the interior's page count, and the ebook embeds the cover.
+    return ["print", "cover", "ebook"] if requested == "all" else [requested]
 
 
 def cmd_doctor(args) -> int:
@@ -84,6 +85,13 @@ def cmd_build(args) -> int:
                 d = result.details
                 print(f"  print [{language}] {result.output.relative_to(book.root)}  "
                       f"(overfull {d['overfull']}, underfull {d['underfull']})")
+            elif edition == "cover":
+                from .cover import build_cover
+
+                d = build_cover(book, language).details
+                print(f"  cover [{language}] {d['ebook']}")
+                print(f"  cover [{language}] " + (f"{d['print']}  ({d['pages']} pages, spine {d['spine']}\")"
+                                                  if d["print"] else "no print wrap: the interior is not built"))
             else:
                 result = build_ebook(book, language)
                 print(f"  ebook [{language}] {result.output.relative_to(book.root)}")
@@ -370,6 +378,27 @@ def cmd_translation(args) -> int:
     return 1 if failed else 0
 
 
+def cmd_art(args) -> int:
+    from . import art
+
+    book = load_book(args.book)
+    if args.action == "add":
+        if not args.file or not args.id:
+            print("error: kdp art add <book> <file> --id <id>", file=sys.stderr)
+            return 2
+        found = art.add(book, Path(args.file), args.id, actor=_actor(), purpose=args.purpose, prompt=args.prompt or "",
+                        model=args.model or "", provider=args.provider or "", seed=args.seed,
+                        derived_from=args.derived_from or "", lettering=args.lettering, notes=args.notes or "")
+        print(f"  {found['id']}: {found['path']}  {found['width']} × {found['height']} px")
+        return 0
+    for found in art.records(book):
+        how = found.get("model") or ("recorded" if found["recorded"] else "not recorded")
+        print(f"  {found['id']:24} {found.get('purpose', ''):13} {found['width']} × {found['height']} px  "
+              f"lettering {found.get('lettering', '?'):6} {how}"
+              + ("  ⚠ changed since it was recorded" if found["changed_since"] else ""))
+    return 0
+
+
 def cmd_new(args) -> int:
     from .structure import slug
 
@@ -427,7 +456,7 @@ def main(argv: list[str] | None = None) -> int:
         p = sub.add_parser(name, help=text)
         p.add_argument("book", nargs="?", default=".")
         p.add_argument("--lang")
-        p.add_argument("--edition", choices=["print", "ebook", "all"], default="all")
+        p.add_argument("--edition", choices=["print", "ebook", "cover", "all"], default="all")
         if name == "build":
             p.add_argument("--no-bleed", action="store_true", help="a reading proof without bleed")
         p.set_defaults(func=func)
@@ -476,6 +505,22 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--into", help="the part to append the section to")
     p.add_argument("--reason", "-m", required=True)
     p.set_defaults(func=cmd_move)
+
+    p = sub.add_parser("art", help="the book's pictures (cover art, illustrations), each with how it was made")
+    p.add_argument("action", choices=["list", "add"])
+    p.add_argument("book")
+    p.add_argument("file", nargs="?")
+    p.add_argument("--id")
+    p.add_argument("--purpose", choices=["cover", "illustration"], default="cover")
+    p.add_argument("--lettering", choices=["none", "baked"], default="none",
+                   help="baked: the picture already carries words")
+    p.add_argument("--prompt")
+    p.add_argument("--model")
+    p.add_argument("--provider")
+    p.add_argument("--seed", type=int)
+    p.add_argument("--derived-from", help="the art id this picture was made from")
+    p.add_argument("--notes")
+    p.set_defaults(func=cmd_art)
 
     p = sub.add_parser("language", help="add a language to the book (meta.yaml and a stub per section)")
     p.add_argument("action", choices=["add"])

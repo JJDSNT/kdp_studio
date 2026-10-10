@@ -47,6 +47,9 @@ _POINT_DECIMAL = {"en", "ja", "zh", "ko", "he", "th", "hi"}
 LENGTH_RATIO = (0.7, 1.4)
 #: What `meta.yaml` says in words, and so changes with the language.
 META_TEXT = ("title", "subtitle", "tagline", "description", "colophon")
+#: The words of the cover (`cover:` in meta.yaml) that are prose. How the
+#: title breaks (`cover.title`) is decided again in each language.
+COVER_TEXT = ("line", "back", "about")
 
 
 # ---------------------------------------------------------------- glossary
@@ -351,6 +354,14 @@ def meta_findings(book: Book, language: str) -> list[Finding]:
             same = str(source[key]).strip() == str(target[key]).strip()
             findings.append(Finding(f"meta-{key}", f"meta.yaml: {key}", WARN if same else PASS,
                                     "identical to the source" if same else "translated", "translated"))
+    cover_a, cover_b = source.get("cover") or {}, target.get("cover") or {}
+    for key in COVER_TEXT:
+        if cover_a.get(key):
+            same = str(cover_a[key]).strip() == str(cover_b.get(key) or "").strip()
+            findings.append(Finding(f"meta-cover-{key}", f"meta.yaml: cover.{key}",
+                                    WARN if same or not cover_b.get(key) else PASS,
+                                    "missing" if not cover_b.get(key) else "identical to the source" if same
+                                    else "translated", "translated"))
     parts_a, parts_b = source.get("parts") or {}, target.get("parts") or {}
     same = sorted(str(k) for k in parts_a if str(parts_b.get(k, "")).strip() == str(parts_a[k]).strip())
     missing = sorted(str(k) for k in parts_a if not parts_b.get(k))
@@ -428,6 +439,10 @@ def language_meta(book: Book, translated: dict[str, Any] | None = None) -> dict[
     for key in META_TEXT:
         if source.get(key) and str(translated.get(key) or "").strip():
             meta[key] = translated[key]
+    if isinstance(source.get("cover"), dict):
+        words = translated.get("cover") or {}
+        # The break of the title belongs to the source's words: the template breaks the new one.
+        meta["cover"] = {k: (words.get(k) or v) for k, v in source["cover"].items() if k != "title"}
     titles = {str(k): str(v) for k, v in (translated.get("parts") or {}).items() if str(v).strip()}
     meta["parts"] = {k: titles.get(str(k), v) for k, v in (source.get("parts") or {}).items()}
     # Two languages of one book are two ebooks: each has its own identifier.

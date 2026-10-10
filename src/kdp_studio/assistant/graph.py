@@ -86,8 +86,9 @@ PROPOSALS = {
 }
 #: Runs at once: builds are disposable and checks only measure.
 RUNS = {
-    "build": "build an edition (edition print|ebook, language)",
-    "check": "measure an edition (edition print|ebook, language)",
+    "build": "build an edition (edition print|ebook|cover, language); the cover's wrap is sized from the built "
+             "print interior, so build print first",
+    "check": "measure an edition (edition print|ebook|cover, language)",
 }
 
 SYSTEM = (
@@ -134,7 +135,7 @@ SCHEMA = {
         "section": {"type": "string"},
         "path": {"type": "string"},
         "version": {"type": "string"},
-        "edition": {"type": "string", "enum": ["", "print", "ebook"]},
+        "edition": {"type": "string", "enum": ["", "print", "ebook", "cover"]},
         "scope": {"type": "string", "enum": ["", *SCOPES]},
         "rationale": {"type": "string"},
         "text": {"type": "string"},

@@ -30,8 +30,8 @@ is how *A Era dos Agentes* started, and it cost dearly.
    - the continuity reviser as an agent over the repetition map (deliberate
      template vs seam), the interviewer (`intentions.md`), the intention
      guardian at every automatic gate, the writer.
-4. **Companion** — *next, with the cover (9): the four KDP products need
-   both per language.* `kdp companion`: prompt pages, `pedido.txt`, QR targets and
+4. **Companion** — *next: the four KDP products need it per language.*
+   `kdp companion`: prompt pages, `pedido.txt`, QR targets and
    the start page generated from the manuscript, replacing the legacy
    exporter; link check; one repository for several books.
 5. **Visual inspection** — rasterise the page types (part and chapter
@@ -50,15 +50,13 @@ is how *A Era dos Agentes* started, and it cost dearly.
    against its source and goes stale when the source changes. Remaining:
    register rules for English in the style catalogue, a chapter gate per
    translated language.
-9. **Cover and illustrations** — KDP Studio's own structure for them (the
-   author's direction, 2026-10-10: similar to Cine Toaster's, not a dependency
-   on it). Art and typography are separate steps: a generative model makes the
-   art *without* lettering, and every word on the cover — title, subtitle,
-   author, spine, back-cover copy, barcode area — is set by code from
-   `meta.yaml`, with the book's fonts, because models misspell. Ebook cover
-   (1600 × 2560) and the print wrap cover computed from the frozen page count
-   (spine), per language, with cover templates in the catalogue; illustrations
-   as book records (prompt, model, source file, where used).
+9. **Cover and illustrations** — *the cover is delivered (2026-10-10, ADR
+   0013):* art as records without lettering, every word set by a cover
+   template from `meta.yaml`, sizes from a publisher profile and the book's
+   trim and page count, the ebook cover and the print wrap from one design,
+   measured. Remaining: an image provider adapter that generates art and
+   writes its record (after Cine Toaster's providers); illustrations placed
+   in the text; case-bound wraps.
 10. **Ingestion, diagnosis and mapping** (modes B and C) — any existing
     material, catalogued and mapped (keep, revise, rewrite, move, discard,
     preserve) against the intention; mode C at 100% fidelity.

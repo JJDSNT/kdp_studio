@@ -1,0 +1,27 @@
+name: nocturne
+kind: cover
+title: Nocturne
+description: >
+  The cover of the Nocturne family: a night ground, the title in a geometric
+  sans with its last line in cold cyan, a short rule and the tagline in spaced
+  capitals. The art, when the book has one, carries no lettering: every word
+  is set here, from meta.yaml, so the same art serves every language. One
+  design gives the ebook cover and the print wrap (back, spine, front).
+origin: Designed for "A Era dos Agentes" (Jaime Dias, 2026).
+engine: lualatex
+fonts: [TeX Gyre Pagella, TeX Gyre Adventor]
+colors:
+  night: "040D16"
+  cream: "F2EFE9"
+  cold: "32D9E2"
+  warm: "E3A870"
+  grey: "8C98A1"
+# The night laid over the art so the words stay readable, as (distance from
+# the top, opacity) pairs; baked into the picture, so the print file carries
+# no transparency.
+scrim: [[0.0, 0.94], [0.30, 0.82], [0.50, 0.30], [0.62, 0.0], [0.78, 0.0], [1.0, 0.80]]
+# On the wrap, the art dissolves into the night towards the spine, over this
+# share of its width.
+edge_fade: 0.10
+# Words keep this distance from the trim, in inches at a 6in-wide cover.
+margin: 0.55

@@ -193,8 +193,14 @@ def test_meta_and_glossary_are_drafted_for_the_author(sample):
     book = load_book(sample)
     meta = translate_meta(book, "pt-BR", model=Answers({
         "title": "O Livro de Amostra", "subtitle": "Cada construção, uma vez", "tagline": "", "colophon": "**x**",
+        "cover_line": "Um exemplo que se lê como livro",
         "parts": [{"id": "1", "title": "Fazer coisas"}, {"id": "9", "title": "não existe"}], "notes": "n"}))
     assert meta["meta"]["parts"] == {"1": "Fazer coisas"} and "tagline" not in meta["meta"]
+    assert meta["meta"]["cover"] == {"line": "Um exemplo que se lê como livro"}
+    from kdp_studio.translation import language_meta
+
+    started = language_meta(book, meta["meta"])["cover"]
+    assert started["line"] == "Um exemplo que se lê como livro" and started["back"].startswith("A book is")
     draft = propose_glossary(book, "pt-BR", model=Answers({
         "terms": [{"source": ["workshop", "workshops"], "target": ["oficina", "oficinas"], "note": "not ateliê"}],
         "keep": ["Rua Augusta"], "notes": ""}))
