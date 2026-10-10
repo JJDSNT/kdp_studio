@@ -257,6 +257,119 @@ def cmd_move(args) -> int:
     return 0
 
 
+def cmd_language(args) -> int:
+    from . import jobs
+    from .commands import dispatch
+
+    book = load_book(args.book)
+    if args.copy_meta:
+        result = dispatch(book, "add_language", {"language": args.language, "reason": args.reason or ""}, _actor())
+    else:
+        job = jobs.start(book, "add_language", {"language": args.language, "reason": args.reason or ""}, _actor(),
+                         wait=True)
+        if job["state"] != "done":
+            print(f"error: {job['error']}", file=sys.stderr)
+            return 1
+        result = job["result"]
+    print(f"  {result['language']} added: {result['sections']} section(s) waiting for translation")
+    print(f"  read manuscript/{result['language']}/meta.yaml"
+          + (" (translated by the translator; the title is yours to decide)" if result["meta_translated"]
+             else " (a copy of the source: translate it)"))
+    if result.get("notes"):
+        print(f"  translator: {result['notes']}")
+    print(f"  next: kdp glossary {args.book} {result['language']} — then kdp translate {args.book} "
+          f"{result['language']} <section>")
+    return 0
+
+
+def cmd_glossary(args) -> int:
+    from . import jobs
+    from .translation import glossary
+
+    book = load_book(args.book)
+    found = glossary(book)
+    if found.present and not args.draft:
+        for forms_a, forms_b, note in found.pairs(book.source_language, args.language):
+            print(f"  {' / '.join(forms_a):34} {' / '.join(forms_b)}" + (f"   — {note}" if note else ""))
+        if found.keep:
+            print("  never translated: " + ", ".join(found.keep))
+        return 0
+    job = jobs.start(book, "propose_glossary", {"language": args.language}, _actor(), wait=True)
+    if job["state"] != "done":
+        print(f"error: {job['error']}", file=sys.stderr)
+        return 1
+    result = job["result"]
+    print(f"  {result['summary']}")
+    if not result["written"]:
+        print(result["glossary"])
+    if result["notes"]:
+        print(f"  translator: {result['notes']}")
+    return 0
+
+
+def cmd_translate(args) -> int:
+    from . import jobs
+
+    book = load_book(args.book)
+    payload = {"language": args.language, "instruction": args.instruction or ""}
+    kind = "translate_section" if args.section else "translate_book"
+    if args.section:
+        payload["section"] = args.section
+    job = jobs.start(book, kind, payload, _actor(), wait=True)
+    if job["state"] != "done":
+        print(f"error: {job['error']}", file=sys.stderr)
+        return 1
+    result = job["result"]
+    for item in [result] if args.section else result["translated"]:
+        counts = ", ".join(f"{v} {k}" for k, v in sorted(item["checks"].items()))
+        print(f"  {item['section']:44} {item['version']}  {item['words']} words  ({counts})")
+    for item in result.get("failed") or []:
+        print(f"  {item['section']:44} FAILED: {item['error']}")
+    for finding in result.get("findings") or []:
+        print(f"    {MARK[finding['verdict']]}  {finding['item']}  {finding['measured']}"
+              + (f"  (required {finding['required']})" if finding["required"] else ""))
+        if finding["detail"]:
+            print(f"          {finding['detail']}")
+    for adaptation in result.get("adaptations") or []:
+        print(f"    adapted: “{adaptation['source']}” → “{adaptation['target']}” — {adaptation['why']}")
+    print(f"  candidates wait for you: kdp translation {args.book} --lang {args.language}")
+    return 1 if result.get("failed") else 0
+
+
+def cmd_translation(args) -> int:
+    from .translation import report
+
+    book = load_book(args.book)
+    languages = [args.lang] if args.lang else [lang for lang in book.languages if lang != book.source_language]
+    if not languages:
+        print(f"  the book has only {book.source_language} — `kdp language add {args.book} <language>`")
+        return 0
+    failed = False
+    for language in languages:
+        found = report(book, language, args.section or None)
+        g = found["glossary"]
+        print(f"\n  [{language}] from {found['source_language']}: "
+              + (", ".join(f"{v} {k}" for k, v in sorted(found["states"].items())) or "no sections")
+              + (f"; glossary of {g['terms']} term(s), {g['keep']} kept name(s)" if g["present"]
+                 else "; no glossary.yaml"))
+        for f in found["meta"]:
+            if f["verdict"] not in ("pass", "info") or args.all:
+                print(f"    {MARK[f['verdict']]}  {f['item']}  {f['measured']}" + (f"  — {f['detail']}" if f["detail"] else ""))
+        for section in found["sections"]:
+            waiting = f"  ({section['candidates']} candidate(s) to read)" if section["candidates"] else ""
+            ratio = f"{section['words']}/{section['source_words']} words" if section["words"] else ""
+            print(f"    {section['state']:13} {section['id']:44} {ratio}{waiting}")
+            for f in section["findings"]:
+                if f["verdict"] != "pass" or args.all:
+                    print(f"        {MARK[f['verdict']]}  {f['item']}: {f['measured']}"
+                          + (f"  (required {f['required']})" if f["required"] else ""))
+                    if f["detail"]:
+                        print(f"              {f['detail']}")
+        failed |= found["summary"].get(FAIL, 0) > 0 or found["meta_summary"].get(FAIL, 0) > 0
+        failed |= any(k != "translated" for k in found["states"])
+    return 1 if failed else 0
+
+
 def cmd_new(args) -> int:
     from .structure import slug
 
@@ -363,6 +476,34 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--into", help="the part to append the section to")
     p.add_argument("--reason", "-m", required=True)
     p.set_defaults(func=cmd_move)
+
+    p = sub.add_parser("language", help="add a language to the book (meta.yaml and a stub per section)")
+    p.add_argument("action", choices=["add"])
+    p.add_argument("book")
+    p.add_argument("language")
+    p.add_argument("--copy-meta", action="store_true", help="copy the source meta.yaml instead of translating it")
+    p.add_argument("--reason", "-m")
+    p.set_defaults(func=cmd_language)
+
+    p = sub.add_parser("glossary", help="the book's bilingual glossary; drafted by the translator when it has none")
+    p.add_argument("book")
+    p.add_argument("language")
+    p.add_argument("--draft", action="store_true", help="ask for a draft even when glossary.yaml exists (printed)")
+    p.set_defaults(func=cmd_glossary)
+
+    p = sub.add_parser("translate", help="the translator: one section, or every pending one, as candidate versions")
+    p.add_argument("book")
+    p.add_argument("language")
+    p.add_argument("section", nargs="?")
+    p.add_argument("--instruction", "-m")
+    p.set_defaults(func=cmd_translate)
+
+    p = sub.add_parser("translation", help="a translated language measured against its source")
+    p.add_argument("book", nargs="?", default=".")
+    p.add_argument("--lang")
+    p.add_argument("--section", action="append")
+    p.add_argument("--all", action="store_true", help="also what passed")
+    p.set_defaults(func=cmd_translation)
 
     p = sub.add_parser("tools", help="open tools KDP Studio uses (Vale, LanguageTool, EPUBCheck)")
     p.add_argument("action", choices=["list", "install"], nargs="?", default="list")

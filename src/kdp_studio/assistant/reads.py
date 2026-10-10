@@ -107,6 +107,31 @@ def _research(studio: Studio, args: dict[str, Any]) -> str:
     return "\n".join(lines) or "No research yet."
 
 
+def _translation(studio: Studio, args: dict[str, Any]) -> str:
+    from ..translation import report
+
+    book = studio.book
+    languages = [lang for lang in book.languages if lang != book.source_language]
+    if not languages:
+        return f"The book has only {book.source_language}. A language is added with `add_language`."
+    language = args.get("language") if args.get("language") in languages else languages[0]
+    found = report(book, language, [args["section"]] if args.get("section") else None)
+    g = found["glossary"]
+    lines = [f"{language}, translated from {found['source_language']}: "
+             + ", ".join(f"{n} {state}" for state, n in sorted(found["states"].items())) + ". "
+             + (f"Glossary: {g['terms']} term(s), {g['keep']} kept name(s)." if g["present"]
+                else "No glossary.yaml yet (`propose_glossary` drafts one).")]
+    lines += [f"- meta.yaml {f['item']}: {f['verdict']} — {f['measured']} {f['detail']}".rstrip()
+              for f in found["meta"] if f["verdict"] not in ("pass", "info")]
+    for section in found["sections"]:
+        waiting = f", {section['candidates']} candidate(s) to read" if section["candidates"] else ""
+        lines.append(f"- {section['id']}: {section['state']}{waiting}")
+        lines += [f"    {f['verdict']} {f['item']}: {f['measured']}"
+                  + (f" (required {f['required']})" if f["required"] else "") + (f" — {f['detail']}" if f["detail"] else "")
+                  for f in section["findings"] if f["verdict"] != "pass"]
+    return "\n".join(lines)
+
+
 def _plans(studio: Studio, args: dict[str, Any]) -> str:
     import json as _json
 
@@ -134,6 +159,8 @@ READS: dict[str, tuple[str, str, Callable[[Studio, dict[str, Any]], str]]] = {
     "jobs": ("background jobs and their results", "", _jobs),
     "research": ("the research dossiers, or one of them", "path optional (research/<slug>.md)", _research),
     "plan": ("the latest plan the architect proposed", "", _plans),
+    "translation": ("a translated language against its source: each section's state (untranslated, translated, "
+                    "stale, unrecorded) and what was measured", "language; section optional", _translation),
 }
 
 

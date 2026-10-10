@@ -45,6 +45,10 @@ The check says so, with the measured value beside the requirement.
 | `kdp revise <book> <section>` | the voice reviser: a candidate version fixing register and form |
 | `kdp move <book> <section> --before/--after/--into … -m why` | reorder, with the references the move breaks |
 | `kdp new <dir> --title … --author … --idea …` | start a book from an idea |
+| `kdp language add <book> <language>` | a second language: its `meta.yaml` translated and a stub per section |
+| `kdp glossary <book> <language>` | the book's bilingual glossary; drafted by the translator when it has none |
+| `kdp translate <book> <language> [section]` | the translator: one section, or every pending one, as candidate versions |
+| `kdp translation <book>` | a translated language measured against its source, and what went stale |
 | `kdp tools [install <name>]` | open tools used as resources: Vale, LanguageTool, EPUBCheck |
 | `kdp serve <book> [--assistant]` | the control room in the browser, with the assistant |
 
@@ -234,8 +238,10 @@ Two milestones are delivered. The first: the book format, the migration of *A
 Era dos Agentes* with a fidelity audit, the print and ebook builds, measured
 KDP and EPUB checks, human gates and the fidelity auditor. The second: the
 control room, text versions and byte-for-byte editing, and the editorial
-assistant as a CopilotKit CoAgent. The specialised agents (research, writing,
-revision, translation, cover) and the rest of the pipeline are on the
+assistant as a CopilotKit CoAgent. Since then: style checks and the voice
+reviser, the chapter loop, the path from an idea to written chapters, and a
+second language (the translator, the glossary, a translation measured against
+its source). The companion, the cover and the rest of the pipeline are on the
 [roadmap](ai-context/roadmap.md).
 
 ## License

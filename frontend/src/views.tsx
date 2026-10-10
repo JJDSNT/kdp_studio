@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Editor from "./Editor.tsx";
 import {
-  get, runCommand, type BookOverview, type EditionState, type Gate, type Section, type SectionEntry, type VersionReport,
+  get, runCommand, type BookOverview, type EditionState, type Finding, type Gate, type Section, type SectionEntry,
+  type TranslationReport, type VersionReport,
 } from "./api.ts";
 import { go, href, type Route } from "./route.ts";
 
@@ -81,13 +82,18 @@ export function ReviewBadge({ review }: { review: SectionEntry["review"] }) {
   return <span className="review none">{review.state.replace("_", " ")}</span>;
 }
 
+export function TranslationBadge({ state }: { state: string }) {
+  const tone = state === "translated" ? "approved" : state === "stale" ? "changed" : "none";
+  return <span className={`review ${tone}`}>{state === "stale" ? "source changed since" : state}</span>;
+}
+
 function SectionRow({ s, language }: { s: SectionEntry; language: string }) {
   return (
     <tr>
       <td className="num">{s.number || ""}</td>
       <td><a href={href({ view: "section", language, section: s.id })}>{s.title}</a>
         {s.candidates > 0 && <span className="badge">{s.candidates} version(s)</span>}</td>
-      <td><ReviewBadge review={s.review} /></td>
+      <td>{s.translation ? <TranslationBadge state={s.translation} /> : <ReviewBadge review={s.review} />}</td>
       <td className="num">{s.words}</td>
     </tr>
   );
@@ -215,6 +221,13 @@ export function VersionView({ route, onChanged }: { route: Route; onChanged: () 
           <ul>{facts.map((f, i) => <li key={i} className={f[0] === "+" ? "added" : "removed"}>{f[0]} {f[1]}: <code>{f[2]}</code> ×{f[3]}</li>)}</ul>
         ) : <span> · no number, date, name, URL or code changed</span>}
       </div>
+      {data.translation && (
+        <div className="fidelity">
+          <strong>Against the source:</strong>{" "}
+          {data.translation.filter((f) => f.verdict === "pass").length} of {data.translation.length} measurements the same
+          <FindingRows findings={data.translation.filter((f) => f.verdict !== "pass")} />
+        </div>
+      )}
       <label className="toggle"><input type="checkbox" checked={whole} onChange={(e) => setWhole(e.target.checked)} /> Whole text</label>
       <div className="diff">
         {paragraphs(data.diff).map((paragraph, i, all) => {
@@ -498,6 +511,119 @@ export function StyleView({ language }: { language: string }) {
   );
 }
 
+// --------------------------------------------------------- translation
+
+function FindingRows({ findings }: { findings: Finding[] }) {
+  if (!findings.length) return null;
+  return (
+    <table className="findings">
+      <tbody>
+        {findings.map((f) => (
+          <tr key={f.id} className={f.verdict}>
+            <td className="verdict">{f.verdict}</td>
+            <td>{f.item}</td>
+            <td>{f.measured}{f.required && <span className="muted"> (required {f.required})</span>}
+              {f.detail && <div className="muted">{f.detail}</div>}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+export function TranslationView({ book, language, onChanged }: { book: BookOverview; language: string; onChanged: () => void }) {
+  const source = book.source_language;
+  const others = Object.keys(book.languages).filter((l) => l !== source);
+  const translated = language !== source;
+  const { data, error, reload } = useQuery(
+    () => (translated ? get<TranslationReport>("/api/translation", { lang: language }) : Promise.resolve(null)),
+    [language, book.revision]);
+  const [added, setAdded] = useState("");
+  const [status, setStatus] = useState("");
+
+  async function job(kind: string, payload: Record<string, unknown>) {
+    setStatus("");
+    try {
+      await runCommand("start_job", { kind, payload });
+      go({ view: "jobs", language });
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+
+  async function confirm(section: string) {
+    const rationale = window.prompt(`Why does the ${language} text of ${section} still correspond to the source?`);
+    if (rationale === null) return;
+    try {
+      await runCommand("confirm_translation", { language, section, rationale });
+      reload();
+      onChanged();
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+
+  if (!translated) {
+    return (
+      <div className="page">
+        <h1>Translation</h1>
+        <p className="muted">{source} is the language the book is written in. Another language is the same book,
+          section by section: the translator adapts each one as a candidate version you read and adopt, and what must
+          survive the translation is measured against the source.</p>
+        {others.map((l) => (
+          <p key={l}><a href={href({ view: "translation", language: l })}>{l} — {book.languages[l].title}</a></p>
+        ))}
+        <div className="decide">
+          <input placeholder="A language to add (en, es, fr…)" value={added} onChange={(e) => setAdded(e.target.value)} />
+          <button disabled={!added.trim()} onClick={() => job("add_language", { language: added.trim() })}>Add language</button>
+        </div>
+        <Problem text={status} />
+      </div>
+    );
+  }
+  if (error) return <Problem text={error} />;
+  if (!data) return <p className="muted">Measuring the translation against its source…</p>;
+  const pending = data.sections.filter((s) => (s.state === "untranslated" || s.state === "stale") && !s.candidates);
+  return (
+    <div className="page">
+      <h1>Translation — {language}</h1>
+      <p className="muted">From {data.source_language}. {Object.entries(data.states).map(([state, n]) => `${n} ${state}`).join(", ")}.
+        Whether it reads well is yours to judge; what is listed here was measured.</p>
+      <p>{data.glossary.present
+        ? <>Glossary: {data.glossary.terms} term(s), {data.glossary.keep} name(s) never translated (<code>glossary.yaml</code>).</>
+        : <>No <code>glossary.yaml</code> yet: terms are not checked.{" "}
+          <button className="secondary" onClick={() => job("propose_glossary", { language })}>Draft the glossary</button></>}</p>
+      {pending.length > 0 && (
+        <p><button onClick={() => job("translate_book", { language })}>Translate the {pending.length} pending section(s)</button>
+          <span className="muted"> Read one translated chapter first: the rest follows its voice.</span></p>
+      )}
+      <Problem text={status} />
+      <FindingRows findings={data.meta.filter((f) => f.verdict !== "pass")} />
+      <table className="contents">
+        <tbody>
+          {data.sections.map((s) => (
+            <tr key={s.id}>
+              <td className="num">{s.number || ""}</td>
+              <td><a href={href({ view: "section", language, section: s.id, tab: s.candidates ? "versions" : "read" })}>{s.title}</a>
+                {s.title !== s.source_title && <div className="muted">{s.source_title}</div>}
+                {s.candidates > 0 && <span className="badge">{s.candidates} version(s)</span>}
+                <FindingRows findings={s.findings.filter((f) => f.verdict !== "pass")} /></td>
+              <td><TranslationBadge state={s.state} /></td>
+              <td className="num">{s.words ? `${s.words} / ${s.source_words}` : s.source_words}</td>
+              <td>
+                <button className="secondary" onClick={() => job("translate_section", { language, section: s.id })}>
+                  {s.state === "untranslated" ? "Translate" : "Translate again"}</button>
+                {(s.state === "stale" || s.state === "unrecorded") && (
+                  <button className="secondary" onClick={() => confirm(s.id)}>Still corresponds</button>)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------- continuity
 
 interface Repetition {
@@ -562,7 +688,12 @@ export function JobsView({ language }: { language: string }) {
               {job.result.version ? <a href={href({ view: "version", language: job.payload.language || language,
                 section: job.payload.section, version: String(job.result.version) })}>Compare version {String(job.result.version)} →</a> : null}
               {Array.isArray(job.result.violations) && job.result.violations.length > 0 &&
-                <span className="problem"> ⚠ {(job.result.violations as string[]).join("; ")}</span>}</p>
+                <span className="problem"> ⚠ {(job.result.violations as string[]).join("; ")}</span>}
+              {Array.isArray(job.result.translated) && (job.result.translated as { section: string; version: string }[]).map((t) => (
+                <span key={t.version}> <a href={href({ view: "version", language: job.payload.language || language,
+                  section: t.section, version: t.version })}>{t.section} →</a></span>))}
+              {job.kind.startsWith("translate") || job.kind === "add_language" || job.kind === "propose_glossary"
+                ? <> <a href={href({ view: "translation", language: job.payload.language || language })}>Translation →</a></> : null}</p>
           )}
         </div>
       ))}

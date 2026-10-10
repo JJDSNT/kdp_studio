@@ -5,7 +5,7 @@ type: roadmap
 status: active
 owner: project
 created_at: 2026-10-04
-updated_at: 2026-10-04
+updated_at: 2026-10-10
 ---
 
 # Roadmap
@@ -30,7 +30,8 @@ is how *A Era dos Agentes* started, and it cost dearly.
    - the continuity reviser as an agent over the repetition map (deliberate
      template vs seam), the interviewer (`intentions.md`), the intention
      guardian at every automatic gate, the writer.
-4. **Companion** — `kdp companion`: prompt pages, `pedido.txt`, QR targets and
+4. **Companion** — *next, with the cover (9): the four KDP products need
+   both per language.* `kdp companion`: prompt pages, `pedido.txt`, QR targets and
    the start page generated from the manuscript, replacing the legacy
    exporter; link check; one repository for several books.
 5. **Visual inspection** — rasterise the page types (part and chapter
@@ -43,8 +44,12 @@ is how *A Era dos Agentes* started, and it cost dearly.
    checks, recorded as practices with the check that enforces each (Cine
    Toaster's `enforced_by`), so the tool reports what still depends on a
    person remembering.
-8. **Localisation** — `en` edition: glossary, stable exercise ids, the voice
-   reviser of the target language, labels from the locale.
+8. **Localisation** — *brought forward and delivered (2026-10-10, ADR 0012):*
+   a language joins the book, the translator proposes each section as a
+   candidate, the glossary is the book's, and the translation is measured
+   against its source and goes stale when the source changes. Remaining:
+   register rules for English in the style catalogue, a chapter gate per
+   translated language.
 9. **Cover** — ebook cover and the print wrap cover computed from the frozen
    page count (spine), with cover templates in the catalogue; art and
    typography as separate steps.

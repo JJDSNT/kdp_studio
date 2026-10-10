@@ -112,6 +112,33 @@ in the reader's text.
 Footnotes (`[^id]`), lists, tables, images and code blocks are CommonMark.
 Raw HTML is refused.
 
+## A second language
+
+`kdp language add <book> <language>` adds it: `languages` in `book.yaml`, a
+`meta.yaml` with its own `identifier`, and one stub per section — the
+source's frontmatter and no body, which reads as *untranslated*. The
+translator fills each section as a candidate version; the frontmatter's
+`title`, `toc_title`, `synopsis` and `promise` are translated, `kind` and
+`research` are not. What a translation must keep from its source — prompt
+ids, exercises, callouts, footnotes, code, URLs, numbers — is measured by
+`kdp translation`.
+
+### `glossary.yaml`
+
+The book's bilingual decisions, at its root; optional, and the author's:
+
+```yaml
+terms:
+  - pt-BR: [agente, agentes]     # every form the term takes
+    en: [agent, agents]
+    note: fixed by the localisation notes
+keep: [Codex, AGENTS.md]         # names never translated
+guide: [editorial/07-localizacao.md]   # the book's notes, read by the translator
+```
+
+A term used in a source section and absent from its translation is reported;
+a kept name must appear the same number of times.
+
 ## Other directories
 
 | Path | Contents |
@@ -123,5 +150,7 @@ Raw HTML is refused.
 | `experiments/` | records of exercises actually run |
 | `archive/` | earlier drafts and retired material, kept for provenance |
 | `templates/<kind>/<name>/` | the book's own edition templates |
+| `glossary.yaml` | terms and names decided for every language (above) |
+| `versions/<language>/<section>/` | candidate versions, with the text each was based on |
 | `state.json` | runtime-owned gates and decisions; never edited by hand |
 | `builds/` | regenerated output; git-ignored |

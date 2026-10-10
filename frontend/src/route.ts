@@ -2,7 +2,7 @@
 // can put the author anywhere.
 
 export type View = "book" | "section" | "version" | "gates" | "editions" | "proofs" | "documents" | "style"
-  | "continuity" | "jobs" | "plan" | "research";
+  | "continuity" | "jobs" | "plan" | "research" | "translation";
 
 export interface Route {
   view: View;
@@ -14,7 +14,7 @@ export interface Route {
 }
 
 const VIEWS: View[] = ["book", "section", "version", "gates", "editions", "proofs", "documents", "style",
-  "continuity", "jobs", "plan", "research"];
+  "continuity", "jobs", "plan", "research", "translation"];
 
 export function parse(hash: string, fallbackLanguage: string): Route {
   const query = new URLSearchParams(hash.replace(/^#\/?/, ""));

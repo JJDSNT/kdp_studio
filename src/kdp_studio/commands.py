@@ -18,8 +18,10 @@ from .state import Actor
 #: Commands an agent may run. Deciding a gate, adopting or rejecting a version
 #: and editing text directly are a person's.
 #: Reordering changes the book's order, so the assistant asks the author first.
+#: A new language and a first glossary are created, never overwritten; the
+#: assistant asks first all the same.
 AGENT_COMMANDS = {"open_gate", "propose_version", "build", "check", "start_job", "reorder", "add_section",
-                  "remove_section", "add_part", "write_intentions"}
+                  "remove_section", "add_part", "write_intentions", "add_language", "write_glossary"}
 
 
 def _open_gate(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
@@ -128,6 +130,25 @@ def _write_intentions(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, 
     return {"path": "intentions.md", "words": len(text.split())}
 
 
+def _add_language(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from .translation import add_language
+
+    return add_language(book, p["language"], actor=actor, reason=p.get("reason", ""), meta=p.get("meta") or None)
+
+
+def _confirm_translation(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from .translation import confirm_translation
+
+    return confirm_translation(book, p["language"], p["section"], actor=actor, rationale=p.get("rationale", ""))
+
+
+def _write_glossary(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from .translation import write_glossary
+
+    return write_glossary(book, str(p["text"]), actor=actor, reason=p.get("reason", ""),
+                          replace=bool(p.get("replace")))
+
+
 COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "open_gate": _open_gate,
     "decide_gate": _decide_gate,
@@ -145,6 +166,9 @@ COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "add_part": _add_part,
     "adopt_plan": _adopt_plan,
     "write_intentions": _write_intentions,
+    "add_language": _add_language,
+    "confirm_translation": _confirm_translation,
+    "write_glossary": _write_glossary,
 }
 
 

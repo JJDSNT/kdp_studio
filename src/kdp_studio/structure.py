@@ -145,7 +145,8 @@ def write_contents(book: Book, contents: list[Any], *, actor: Actor, reason: str
         path.write_text("".join(lines[:start]) + block + "".join(lines[end:]), encoding="utf-8")
         try:
             after = load_book(book.root)
-            after.contents(book.source_language)
+            for language in after.languages:
+                after.contents(language)
         except Exception:
             path.write_text(text, encoding="utf-8")
             raise
@@ -198,21 +199,24 @@ def add_section(book: Book, *, title: str, actor: Actor, reason: str, synopsis: 
         contents[_part_index(contents, into)].setdefault("sections", []).append(section_id)
     else:
         contents.append(section_id)
-    path = book.manuscript_dir(book.source_language) / f"{section_id}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_stub(title.strip(), kind, synopsis.strip(), promise.strip()), encoding="utf-8")
+    # Every language gets the stub: a translated language shows it as untranslated.
+    paths = [book.manuscript_dir(language) / f"{section_id}.md" for language in book.languages]
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_stub(title.strip(), kind, synopsis.strip(), promise.strip()), encoding="utf-8")
     try:
         impact_by_language = write_contents(book, contents, actor=actor, reason=f"add “{title.strip()}”: {reason}",
-                                            also=(path,))
+                                            also=tuple(paths))
     except Exception:
-        path.unlink(missing_ok=True)
+        for path in paths:
+            path.unlink(missing_ok=True)
         raise
     return {"section": section_id, "impact": impact_by_language}
 
 
 def add_part(book: Book, *, part: str, title: str, actor: Actor, reason: str, kind: str = "part",
              before: str = "", after: str = "") -> dict[str, Any]:
-    """A new part (its title goes to the source language's meta.yaml)."""
+    """A new part (its title goes to every language's meta.yaml)."""
 
     contents = copy.deepcopy(book.manifest["contents"])
     if any(isinstance(i, dict) and str(i.get("part")) == str(part) for i in contents):
@@ -223,12 +227,17 @@ def add_part(book: Book, *, part: str, title: str, actor: Actor, reason: str, ki
     anchor = before or after
     index = (_part_index(contents, anchor) + (0 if before else 1)) if anchor else len(contents)
     contents.insert(index, item)
-    meta_path = book.manuscript_dir(book.source_language) / "meta.yaml"
-    meta = yaml.safe_load(meta_path.read_text("utf-8")) if meta_path.is_file() else {}
-    meta = meta or {}
-    meta.setdefault("parts", {})[item["part"]] = title
-    meta_path.write_text(yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, width=100), encoding="utf-8")
-    write_contents(book, contents, actor=actor, reason=f"add part “{title}”: {reason}", also=(meta_path,))
+    # Every language needs the title to be read at all; the others carry the
+    # source's until it is translated (the translation report says so).
+    meta_paths = []
+    for language in book.languages:
+        meta_path = book.manuscript_dir(language) / "meta.yaml"
+        meta = yaml.safe_load(meta_path.read_text("utf-8")) if meta_path.is_file() else {}
+        meta = meta or {}
+        meta.setdefault("parts", {})[item["part"]] = title
+        meta_path.write_text(yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, width=100), encoding="utf-8")
+        meta_paths.append(meta_path)
+    write_contents(book, contents, actor=actor, reason=f"add part “{title}”: {reason}", also=tuple(meta_paths))
     return {"part": item["part"]}
 
 

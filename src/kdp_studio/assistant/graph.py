@@ -46,6 +46,7 @@ VIEWS = {
     "documents": "intentions and editorial documents (document optional)",
     "style": "the writing-vice findings of the whole book", "continuity": "passages that recur across sections",
     "jobs": "background jobs, with their progress and results",
+    "translation": "a translated language against its source (needs language = the translated one)",
 }
 
 #: Changes it may propose; each is a command, confirmed by the author first.
@@ -73,6 +74,15 @@ PROPOSALS = {
     "add_section": "add a chapter (`title`, `synopsis`, `promise`; place with `before`/`after` a section or `into` "
                    "a part, else at the end; needs `rationale`) as a stub for the writer",
     "remove_section": "take a section out of the book (`section`, needs `rationale`); it is archived, not deleted",
+    "add_language": "add a language to the book (`language` = the new one, e.g. en): the translator translates "
+                    "the title, part titles and copyright page, and every section starts as a stub",
+    "propose_glossary": "start the translator on the book's bilingual glossary (`language` = the target): terms "
+                        "and never-translated names; written only when the book has no glossary.yaml",
+    "translate_section": "start the translator on one section (`language` = the target, section; `instruction` "
+                         "optional): an editorial adaptation as a candidate version, measured against the source",
+    "translate_book": "start the translator on every untranslated or stale section of `language` (the target), "
+                      "each as a candidate version; propose it only after the author has read and adopted a "
+                      "first translated chapter and the glossary",
 }
 #: Runs at once: builds are disposable and checks only measure.
 RUNS = {
@@ -93,6 +103,10 @@ SYSTEM = (
     "The author works chapter by chapter and commands through you: to change text, start the reviser with a "
     "precise instruction rather than writing a version yourself. The voice is decided for the whole book (its "
     "voice guide), not per chapter. Chapter approval is the author's: you may say a chapter looks ready. "
+    "Another language: add it, draft the glossary and let the author read it, translate ONE chapter and let "
+    "the author read it in that language, and only then the rest; what the translation report measures (prompt "
+    "ids, numbers, URLs, code, glossary terms) is a finding for the author to read, and whether it reads well "
+    "is theirs to judge. A translation whose source changed is stale: translate it again. "
     "You cannot change the book yourself. You may propose: "
     + "; ".join(f"`{n}`: {t}" for n, t in PROPOSALS.items())
     + ". Version scopes: " + "; ".join(f"`{n}`: {t}" for n, t in SCOPES.items())
@@ -267,13 +281,30 @@ def build(model: Model, studio: Studio, checkpointer=None):
             question = (f"Pôr o revisor de voz para trabalhar em {p['section']} ({p['language']})? "
                         "Ele corrige só registro e forma e deixa uma versão candidata para você comparar.")
             payload = {"kind": "revise_voice", "payload": {"language": p["language"], "section": p["section"]}}
+        elif p["action"] == "add_language":
+            question = (f"Acrescentar {p['language']} ao livro? O tradutor traduz título, partes e página de "
+                        "créditos; cada capítulo começa vazio, à espera da tradução.")
+            payload = {"kind": "add_language", "payload": {"language": p["language"], "reason": p["rationale"]}}
+        elif p["action"] == "propose_glossary":
+            question = (f"Pedir ao tradutor um glossário {studio.book.source_language} → {p['language']}? Ele só é "
+                        "gravado se o livro ainda não tiver glossary.yaml; você revisa antes de traduzir.")
+            payload = {"kind": "propose_glossary", "payload": {"language": p["language"]}}
+        elif p["action"] in ("translate_section", "translate_book"):
+            what = p["section"] if p["action"] == "translate_section" else "todos os capítulos pendentes"
+            question = f"Pôr o tradutor para traduzir {what} para {p['language']}" + (
+                f" ({p['instruction']})" if p["instruction"] else "") + "? Fica como versão candidata."
+            job = {"language": p["language"], "instruction": p["instruction"]}
+            if p["action"] == "translate_section":
+                job["section"] = p["section"]
+            payload = {"kind": p["action"], "payload": job}
         else:
             question = f"Abrir o portão {p['kind']}{' de ' + p['subject'] if p['subject'] else ''} para você decidir?"
             payload = {"kind": p["kind"], "subject": p["subject"]}
         answer = interrupt({"message": question, "proposal": {k: v for k, v in p.items() if k != "text"}})
         if not (isinstance(answer, dict) and answer.get("approved")):
             return {"messages": [AIMessage(content="Certo, não fiz nada.")], "proposal": {}}
-        jobs_ = ("revise_voice", "revise_section", "research", "plan_book", "write_section")
+        jobs_ = ("revise_voice", "revise_section", "research", "plan_book", "write_section", "add_language",
+                 "propose_glossary", "translate_section", "translate_book")
         command = "start_job" if p["action"] in jobs_ else p["action"]
         try:
             result = dispatch(studio.book, command, payload, AGENT)
@@ -309,7 +340,7 @@ def build(model: Model, studio: Studio, checkpointer=None):
                                  "document": "intentions.md" if view == "documents" else "", "id": uuid.uuid4().hex[:8]}}
         if p["action"] in jobs_:
             who = {"revise_voice": "revisor de voz", "revise_section": "revisor", "research": "pesquisador",
-                   "plan_book": "arquiteto", "write_section": "redator"}[p["action"]]
+                   "plan_book": "arquiteto", "write_section": "redator"}.get(p["action"], "tradutor")
             return {"messages": [AIMessage(content=f"O {who} começou ({result['id']}). O resultado aparece "
                                                    "em Tarefas quando ficar pronto.")],
                     "proposal": {}, "navigate": {"view": "jobs", "language": p["language"], "section": "",

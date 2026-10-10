@@ -26,6 +26,8 @@ export interface SectionEntry {
   review: { gate: string; state: string; changed_since: boolean; decided_at: string } | null;
   synopsis: string;
   promise: string;
+  /** In a translated language: untranslated, translated, stale or unrecorded. */
+  translation: string | null;
 }
 
 export interface PartEntry {
@@ -86,6 +88,8 @@ export interface VersionReport extends Version {
     facts_removed: [string, string, number][];
   };
   violations: string[];
+  /** A version in a translated language, measured against its source. */
+  translation?: Finding[];
 }
 
 export interface Finding {
@@ -95,6 +99,19 @@ export interface Finding {
   measured: string;
   required: string;
   detail: string;
+}
+
+export interface TranslationReport {
+  language: string;
+  source_language: string;
+  glossary: { present: boolean; terms: number; keep: number };
+  meta: Finding[];
+  sections: {
+    id: string; number: number; kind: string; title: string; source_title: string; state: string;
+    candidates: number; words: number; source_words: number; findings: Finding[]; summary: Record<string, number>;
+  }[];
+  states: Record<string, number>;
+  summary: Record<string, number>;
 }
 
 export interface EditionState {

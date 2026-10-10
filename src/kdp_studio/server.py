@@ -62,12 +62,17 @@ class Studio:
                 candidates[key] = candidates.get(key, 0) + 1
 
         reviews = gates.chapter_status(book)
+        from .translation import section_states
+
+        translated = {language: section_states(book, language) for language in book.languages
+                      if language != book.source_language}
 
         def section(s, language: str) -> dict[str, Any]:
             return {"type": "section", "id": s.id, "kind": s.kind, "number": s.number, "title": s.title,
                     "toc_title": s.toc_title, "words": s.words, "candidates": candidates.get((language, s.id), 0),
                     "synopsis": s.synopsis, "promise": s.promise,
-                    "review": reviews.get(s.id) if language == book.source_language else None}
+                    "review": reviews.get(s.id) if language == book.source_language else None,
+                    "translation": translated[language][s.id]["state"] if language in translated else None}
 
         languages = {}
         for language in book.languages:
@@ -103,6 +108,20 @@ class Studio:
         return {**versions.read_section(book, language, section_id), "title": found.title,
                 "number": found.number, "kind": found.kind, "words": found.words, "preview": preview,
                 "problem": problem, "versions": versions.list_versions(book, language, section_id)}
+
+    def version(self, version_id: str) -> dict[str, Any]:
+        """A version against the current text; a translation also against its source."""
+
+        book = self.book
+        found = versions.version_report(book, version_id)
+        if found["language"] != book.source_language:
+            from .translation import compare_translation, glossary
+
+            source = versions.read_section(book, book.source_language, found["section"])["text"]
+            found["translation"] = [f.public_dict() for f in compare_translation(
+                source, found["text"], source_language=book.source_language, language=found["language"],
+                terms=glossary(book))]
+        return found
 
     def editions(self, language: str) -> dict[str, Any]:
         book = self.book
@@ -193,7 +212,7 @@ def create_app(root: Path, *, copilot_url: str = "", assistant_reason: str = "")
 
     @app.get("/api/version")
     def version(id: str):
-        return versions.version_report(studio.book, id)
+        return studio.version(id)
 
     @app.get("/api/versions")
     def all_versions(lang: str | None = None):
@@ -229,6 +248,12 @@ def create_app(root: Path, *, copilot_url: str = "", assistant_reason: str = "")
         from .style import check_style
 
         return check_style(studio.book, lang, [section] if section else None, engines=engines).public_dict()
+
+    @app.get("/api/translation")
+    def translation(lang: str):
+        from .translation import report
+
+        return report(studio.book, lang)
 
     @app.get("/api/continuity")
     def continuity(lang: str):

@@ -5,13 +5,14 @@ type: status
 status: active
 owner: project
 created_at: 2026-10-04
-updated_at: 2026-10-04
+updated_at: 2026-10-10
 ---
 
 # Project status
 
-**Phase:** milestones 1 and 2 delivered — the book stands on its own, and the
-author works on it in the control room with the assistant.
+**Phase:** milestones 1 and 2 delivered, 3 under way, and a second language
+brought forward — the book stands on its own, the author works on it in the
+control room with the assistant, and it can be translated section by section.
 
 ## Delivered
 
@@ -63,17 +64,35 @@ author works on it in the control room with the assistant.
   first. Real end to end on a new book. The book lock is re-entrant (a nested
   command deadlocked on its own flock).
 
+- A second language (ADR 0012): `add_language` (meta.yaml and a stub per
+  section), the translator (a candidate version per section, adaptations
+  declared), the book's `glossary.yaml`, the translation measured against its
+  source (structure, prompt ids, code, URLs, numbers, glossary terms), and
+  stale translations when the source changes. `kdp language add`, `glossary`,
+  `translate`, `translation`; the Translation view; the assistant runs it.
+  Verified with the real model on a copy of *A Era dos Agentes*: `en` added,
+  glossary drafted, chapter 4 translated, the English print and ebook built
+  and measured.
+
 ## Next action
 
-NILC-Metrix and spaCy as engines; then the continuity reviser, the
-interviewer and the intention guardian (roadmap, milestone 3).
+On *A Era dos Agentes* itself, the author's acts: `kdp language add … en`,
+read the glossary, read one translated chapter, then the rest. In the tool:
+the companion (`kdp companion`, with the `/en/` pages the QR codes point to)
+and the cover per language, which the four KDP products need; then
+NILC-Metrix and spaCy as engines and the rest of milestone 3.
 
 ## Risks and gaps
 
 - The legacy exercise exporter does not read the new layout; until
   `kdp companion` exists the public `books_resources` must not be regenerated
   from the migrated book.
-- Transparency in the PDF is not measured; EPUBCheck is not installed here.
+- Transparency in the PDF is not measured.
+- A translated language has no cover and no companion pages yet: the English
+  ebook builds without a cover, and its QR codes point to `/en/` addresses
+  that do not exist until the companion is generated.
+- Translation checks cannot see a number written out in words, and the
+  English style catalogue has few register rules.
 - The book has no ebook cover at 1600 × 2560 yet (`cover/pt-BR/art.jpeg` is
   1024 × 1536).
 - The fact inventory's proper-name pattern is heuristic: it can over-report,

@@ -107,3 +107,28 @@ def test_a_revision_is_started_as_a_job_after_yes(sample, tmp_path, monkeypatch)
     graph.invoke(Command(resume={"approved": True}), config)
     assert started["kind"] == "revise_section" and started["payload"]["instruction"] == "Enxugue a abertura"
     assert started["actor"].kind == "agent"
+
+
+def test_a_translation_is_started_as_a_job_and_the_report_is_read(sample, tmp_path, monkeypatch):
+    from kdp_studio.book import load_book
+    from kdp_studio.state import Actor
+    from kdp_studio.translation import add_language
+
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    add_language(load_book(sample), "pt-BR", actor=Actor("author"), meta={"title": "O Livro de Amostra"})
+    started = {}
+    import kdp_studio.jobs as jobs
+
+    monkeypatch.setattr(jobs, "start", lambda book, kind, payload, actor, wait=False:
+                        started.update(kind=kind, payload=payload, actor=actor) or {"id": "job-x"})
+    model = Scripted([{"reply": "", "action": "read", "query": "translation", "language": "pt-BR"},
+                      {"reply": "Proponho traduzir o primeiro capítulo.", "action": "translate_section",
+                       "language": "pt-BR", "section": "01-first-light"}])
+    graph = build(model, Studio(sample), MemorySaver())
+    result, config = run(graph, "Traduza o primeiro capítulo")
+    assert "pt-BR, translated from en: 4 untranslated" in model.prompts[1]
+    assert "traduzir 01-first-light para pt-BR" in result["__interrupt__"][0].value["message"]
+    done = graph.invoke(Command(resume={"approved": True}), config)
+    assert started["kind"] == "translate_section" and started["actor"].kind == "agent"
+    assert started["payload"] == {"language": "pt-BR", "instruction": "", "section": "01-first-light"}
+    assert "tradutor" in done["messages"][-1].content
