@@ -21,7 +21,8 @@ from .state import Actor
 #: A new language and a first glossary are created, never overwritten; the
 #: assistant asks first all the same.
 AGENT_COMMANDS = {"open_gate", "propose_version", "build", "check", "start_job", "reorder", "add_section",
-                  "remove_section", "add_part", "write_intentions", "add_language", "write_glossary", "add_art", "set_theme"}
+                  "remove_section", "add_part", "write_intentions", "add_language", "write_glossary", "add_art",
+                  "set_theme", "add_report"}
 
 
 def _open_gate(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
@@ -171,6 +172,29 @@ def _set_theme(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
     return apply_theme(book, p["theme"], actor=actor, reason=p.get("reason", ""))
 
 
+def _add_report(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    """An agent's report, kept as a dated document in the book: nothing is replaced, nothing else changes."""
+
+    import re
+
+    from .history import commit
+    from .state import book_lock, now
+
+    text = str(p.get("text", "")).strip()
+    agent, subject = str(p["agent"]), str(p.get("subject") or "book")
+    if not text:
+        raise ValidationError("A report cannot be empty")
+    if not re.fullmatch(r"[a-z][a-z0-9-]{1,40}", agent) or not re.fullmatch(r"[\w.-]{1,80}", subject):
+        raise ValidationError("A report names its agent and its subject plainly")
+    stamp = now().replace(":", "").replace("-", "")[:15]
+    path = book.root / "reports" / agent / f"{stamp}-{subject}.md"
+    with book_lock(book.root):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text + "\n", encoding="utf-8")
+        commit(book.root, [path], f"Report by {agent} on {subject}", actor)
+    return {"path": str(path.relative_to(book.root)), "words": len(text.split())}
+
+
 COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "open_gate": _open_gate,
     "decide_gate": _decide_gate,
@@ -193,6 +217,7 @@ COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "write_glossary": _write_glossary,
     "add_art": _add_art,
     "set_theme": _set_theme,
+    "add_report": _add_report,
 }
 
 

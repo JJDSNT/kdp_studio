@@ -195,6 +195,8 @@ sized for its page count. An ebook cover the author supplies as
 | `experiments/` | records of exercises actually run |
 | `archive/` | earlier drafts and retired material, kept for provenance |
 | `templates/<kind>/<name>/` | the book's own edition templates |
+| `reports/<agent>/` | what an agent reported, dated; never replaced |
+| `agents/<id>.yaml`, `knowledge/<name>.md` | the book's own agents and the notes they read |
 | `glossary.yaml` | terms and names decided for every language (above) |
 | `versions/<language>/<section>/` | candidate versions, with the text each was based on |
 | `state.json` | runtime-owned gates and decisions; never edited by hand |

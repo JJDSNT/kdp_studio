@@ -523,6 +523,61 @@ def cmd_theme(args) -> int:
     return 0
 
 
+def cmd_agent(args) -> int:
+    from . import jobs
+    from .agents import manifest as manifests
+
+    book = load_book(args.book)
+    if args.action == "list":
+        for found in manifests.manifests(book.root).values():
+            print(f"  {found.id:20} {found.output:7} {found.works_on:8} {found.source:9} {found.role}")
+        print("  in code: researcher, architect, writer, reviser, voice reviser, translator, designer, critic")
+        return 0
+    if not args.name:
+        print("error: name the agent", file=sys.stderr)
+        return 2
+    if args.action == "remove":
+        from .agents.meta import remove_agent
+
+        print(f"  {remove_agent(args.name)['agent']}: out of your catalogue")
+        return 0
+    if args.action == "show":
+        print(manifests.template({"id": args.name, **manifests.get(args.name, book.root).public_dict()}))
+        return 0
+    if args.action == "create":
+        if not args.brief:
+            print("error: kdp agent create <book> <id> --brief \"what it should do\"", file=sys.stderr)
+            return 2
+        job = jobs.start(book, "create_agent", {"id": args.name, "brief": args.brief, "language": args.lang or "",
+                                                "section": args.section or ""}, _actor(), wait=True)
+    else:
+        job = jobs.start(book, "run_agent", {"agent": args.name, "language": args.lang or "",
+                                             "section": args.section or "", "instruction": args.instruction or ""},
+                         _actor(), wait=True)
+    if job["state"] != "done":
+        print(f"error: {job['error']}", file=sys.stderr)
+        return 1
+    result = job["result"]
+    print(f"  {result.get('summary') or ''}")
+    if args.action == "create":
+        print(f"  reads: {', '.join(result['reads'])}; output: {result['output']}; on a {result['works_on']}")
+        if result["trial"]:
+            print(f"  tried on {result['trial']['on']}: {result['trial']['findings']} finding(s) — "
+                  f"{result['trial']['summary']}")
+        if result["notes"]:
+            print(f"  meta-agent: {result['notes']}")
+        return 0
+    for finding in result.get("findings") or []:
+        print(f"    [{finding['severity']}] {finding['where']}: {finding['what']}\n        → {finding['suggestion']}")
+    for item in result.get("could_not") or []:
+        print(f"    could not establish: {item}")
+    if result.get("path"):
+        print(f"  kept in {result['path']}")
+    if result.get("version"):
+        print(f"  candidate version {result['version']} ({result['applied']} edit(s))")
+    return 0
+
+
 def cmd_new(args) -> int:
     from .structure import slug
 
@@ -629,6 +684,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--into", help="the part to append the section to")
     p.add_argument("--reason", "-m", required=True)
     p.set_defaults(func=cmd_move)
+
+    p = sub.add_parser("agent", help="the catalogue of agents: list them, run one, have the meta-agent create one")
+    p.add_argument("action", choices=["list", "show", "run", "create", "remove"])
+    p.add_argument("book")
+    p.add_argument("name", nargs="?")
+    p.add_argument("--section")
+    p.add_argument("--lang")
+    p.add_argument("--instruction", "-m")
+    p.add_argument("--brief", help="create: what the new agent should do, and for what")
+    p.set_defaults(func=cmd_agent)
 
     p = sub.add_parser("theme", help="the book's design: list the themes, or take one for every edition it covers")
     p.add_argument("book")

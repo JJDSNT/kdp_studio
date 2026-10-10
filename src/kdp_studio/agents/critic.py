@@ -32,6 +32,8 @@ from ..state import Actor, now
 
 AGENT = Actor("critic", "agent")
 SEVERITIES = ("defect", "weakness", "taste")
+#: Whose a problem is: the designer's blocks, the template it drew over, or the art director's picture.
+OWNERS = ("designer", "template", "art")
 SHOWN = (("part", "a part opening"), ("chapter", "a chapter opening"), ("callouts", "a page with callouts"),
          ("exercise", "an exercise with its prompt"))
 
@@ -48,12 +50,22 @@ SYSTEM = (
     "reason, weights that fight, accents spent too often to mean anything, things stranded (a label alone at "
     "the foot of a page, one line of a paragraph alone), collisions, and what survives in black ink: an accent "
     "that turns to a grey too pale to read is a defect of the theme, not of the printer.\n"
+    "Know who can change what, and say whose each problem is in `owner`. The DESIGNER draws a theme and "
+    "controls only this: the faces, the part opening, the chapter opening, the section head, the palette by "
+    "role, what the ebook stylesheet adds, and the cover's colours and faces. The TEMPLATE the theme was drawn "
+    "over fixes how callouts, exercises, prompts, lists, footnotes, running heads and folios are built, and how "
+    "the cover is composed: a problem there is the template's (`template`), to be fixed in the tool, not by "
+    "this designer. The cover's picture and any illustration belong to another agent, the ART DIRECTOR (`art`): "
+    "on a typographic cover, judge the typography and the colours, and do not ask the designer for a picture. "
+    "Hold the designer to what it can do — an accent spent too often, a timid numeral, a face that fights — and "
+    "do not let a weak callout construction count against its theme: note it for its owner.\n"
     "Be specific: say on which picture and where. Give each problem a severity — `defect`: wrong whoever looks; "
     "`weakness`: a decision that does not earn its place; `taste`: defensible, and you would have chosen "
     "otherwise — and a `fix` the designer can act on (the face, the size, the alignment, the rule, the colour by "
     "its role). Do not praise by default: a strength is something a designer would keep on purpose. If the "
     "brief is given, say plainly whether the theme answers it. `verdict` is `accept` only when no defect "
-    "remains and the theme has a character of its own; otherwise `revise`. Write `overall` as a critic writes: "
+    "of the DESIGNER's remains and the theme has a character of its own; otherwise `revise`. Write `overall` as a "
+    "critic writes: "
     "a paragraph with a judgement in it, in the author's language."
 )
 
@@ -66,8 +78,9 @@ SCHEMA = {
         "strengths": {"type": "array", "items": {"type": "string"}},
         "problems": {"type": "array", "items": {"type": "object", "properties": {
             "where": {"type": "string"}, "what": {"type": "string"}, "why": {"type": "string"},
-            "severity": {"type": "string", "enum": list(SEVERITIES)}, "fix": {"type": "string"}},
-            "required": ["where", "what", "why", "severity", "fix"]}},
+            "severity": {"type": "string", "enum": list(SEVERITIES)},
+            "owner": {"type": "string", "enum": list(OWNERS)}, "fix": {"type": "string"}},
+            "required": ["where", "what", "why", "severity", "owner", "fix"]}},
         "verdict": {"type": "string", "enum": ["accept", "revise"]},
     },
     "required": ["overall", "character", "answers_the_brief", "strengths", "problems", "verdict"],
@@ -138,7 +151,8 @@ def critique(book: Book, theme: str, *, language: str = "", brief: str = "", mod
     progress(f"Looking at {len(shown)} pages")
     answer = (model or model_from_env()).ask(SYSTEM, prompt, SCHEMA, images=tuple(path for _, path in shown))
     record = {"theme": theme, "at": now(), "language": language, "shown": [what for what, _ in shown], **answer}
-    record["defects"] = sum(1 for p in answer.get("problems") or [] if p.get("severity") == "defect")
+    record["defects"] = sum(1 for p in answer.get("problems") or []
+                            if p.get("severity") == "defect" and p.get("owner", "designer") == "designer")
     path = _store(theme)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps([*critiques(theme), record], ensure_ascii=False, indent=2), encoding="utf-8")
@@ -150,10 +164,15 @@ def as_instruction(record: dict[str, Any]) -> str:
     """A criticism as the designer reads it: what to change, most serious first."""
 
     order = {severity: index for index, severity in enumerate(SEVERITIES)}
-    problems = sorted(record.get("problems") or [], key=lambda p: order.get(p.get("severity"), 9))
+    every = sorted(record.get("problems") or [], key=lambda p: order.get(p.get("severity"), 9))
+    problems = [p for p in every if p.get("owner", "designer") == "designer"]
     lines = [f"A critic looked at the rendered pages. Its judgement: {record.get('overall', '')}",
              f"On character: {record.get('character', '')}", "What to change:"]
     lines += [f"- [{p['severity']}] {p['where']}: {p['what']} ({p['why']}) Fix: {p['fix']}" for p in problems]
+    others = [p for p in every if p not in problems]
+    if others:
+        lines.append("Not yours to fix (the template's construction, or the art director's picture); leave them: "
+                     + "; ".join(f"{p['where']}: {p['what']}" for p in others))
     if record.get("strengths"):
         lines.append("Keep: " + "; ".join(record["strengths"]))
     return "\n".join(lines)

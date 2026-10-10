@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { get, type BookOverview, type Info, type SectionEntry } from "./api.ts";
 import { STAGES, VIEW_LABELS, go, href, parse, stageOf, type Route } from "./route.ts";
 import {
-  BookView, ContinuityView, DocumentsView, EditionsView, GatesView, JobsView, LibraryView, PlanView, ProofsView,
+  AgentsView, BookView, ContinuityView, DocumentsView, EditionsView, GatesView, JobsView, LibraryView, PlanView, ProofsView,
   PublishView, ReaderView, ResearchView, SectionView, StyleView, TemplatesView, TranslationView, VersionView, useQuery,
 } from "./views.tsx";
 import type { Navigation } from "./Assistant.tsx";
@@ -54,6 +54,7 @@ export default function App() {
           <span className="apart" />
           <a className={route.view === "gates" ? "active" : ""} href={href({ view: "gates", language })}>
             Gates{waiting > 0 && <span className="badge">{waiting}</span>}</a>
+          <a className={route.view === "agents" ? "active" : ""} href={href({ view: "agents", language })}>Agents</a>
           <a className={route.view === "jobs" ? "active" : ""} href={href({ view: "jobs", language })}>Jobs</a>
         </nav>
         <select value={language} onChange={(e) => go({ ...route, language: e.target.value })}>
@@ -100,6 +101,7 @@ export default function App() {
         {route.view === "reader" && <ReaderView language={language} />}
         {route.view === "templates" && <TemplatesView language={language} onChanged={book.reload} />}
         {route.view === "library" && <LibraryView />}
+        {route.view === "agents" && <AgentsView book={data} language={language} />}
         {route.view === "publish" && <PublishView book={data} language={language} />}
         {route.view === "plan" && <PlanView book={data} language={language} onChanged={book.reload} />}
         {route.view === "research" && <ResearchView language={language} />}

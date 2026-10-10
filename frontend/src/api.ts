@@ -146,7 +146,7 @@ export interface Theme {
   designed_by?: string; brief?: string; based_on?: string; revisable: boolean;
   critique: null | {
     at: string; verdict: string; overall: string; character: string; answers_the_brief: string; defects: number;
-    strengths: string[]; problems: { where: string; what: string; why: string; severity: string; fix: string }[];
+    strengths: string[]; problems: { where: string; what: string; why: string; severity: string; owner?: string; fix: string }[];
   };
   inspired_by?: { url: string; title: string; license: string; taken: string }[];
   kinds: Record<string, { description: string; source: string; fonts: string[]; colors: Record<string, string>; origin: string }>;

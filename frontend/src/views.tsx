@@ -700,6 +700,8 @@ export function JobsView({ language }: { language: string }) {
               {Array.isArray(job.result.translated) && (job.result.translated as { section: string; version: string }[]).map((t) => (
                 <span key={t.version}> <a href={href({ view: "version", language: job.payload.language || language,
                   section: t.section, version: t.version })}>{t.section} →</a></span>))}
+              {job.kind === "run_agent" && job.result.path ? <a href={href({ view: "documents", language, document: String(job.result.path) })}>Read the report →</a> : null}
+              {job.kind === "create_agent" ? <> <a href={href({ view: "agents", language })}>Agents →</a></> : null}
               {["design_theme", "revise_theme", "critique_theme"].includes(job.kind) ? <> <a href={href({ view: "templates", language })}>Gallery →</a></> : null}
               {job.kind.startsWith("translate") || job.kind === "add_language" || job.kind === "propose_glossary"
                 ? <> <a href={href({ view: "translation", language: job.payload.language || language })}>Translation →</a></> : null}</p>
@@ -1060,7 +1062,8 @@ export function TemplatesView({ language, onChanged }: { language: string; onCha
                     {theme.critique.problems.map((p, i) => (
                       <tr key={i} className={p.severity === "defect" ? "fail" : p.severity === "weakness" ? "warn" : ""}>
                         <td className="verdict">{p.severity}</td>
-                        <td>{p.where}</td>
+                        <td>{p.where}{p.owner && p.owner !== "designer" && (
+                          <div className="muted">for the {p.owner === "art" ? "art director" : "template"}</div>)}</td>
                         <td>{p.what} <span className="muted">{p.why}</span><div className="muted">→ {p.fix}</div></td>
                       </tr>))}
                   </tbody>
@@ -1241,6 +1244,91 @@ export function PublishView({ book, language }: { book: BookOverview; language: 
       <p>{ready ? "Everything measured here is ready." : "Not ready yet: the open lines above say what is missing."}</p>
       <p className="muted">KDP Studio does not upload: the files go to the publisher's site by hand. They are in <code>builds/{language}/</code>; the metadata package (categories, keywords,
         description) is not generated yet.</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- agents
+
+interface AgentManifest {
+  id: string; title: string; role: string; works_on: string; reads: string[]; output: string; web: boolean;
+  source: string; system: string; origin: { created_by?: string; brief?: string };
+}
+
+const IN_CODE: [string, string][] = [
+  ["researcher", "searches the web and records every source it opened"], ["architect", "proposes parts and chapters"],
+  ["writer", "writes a chapter to its promise"], ["reviser", "changes a section as you instruct"],
+  ["voice reviser", "fixes register and form"], ["translator", "adapts a section into another language"],
+  ["designer", "draws a theme"], ["critic", "judges a theme's rendered pages"],
+];
+
+export function AgentsView({ book, language }: { book: BookOverview; language: string }) {
+  const { data, error } = useQuery(() => get<AgentManifest[]>("/api/agents"), []);
+  const sections = book.languages[language].contents.flatMap((e) => (e.type === "part" ? e.sections : [e]));
+  const [section, setSection] = useState("");
+  const [instruction, setInstruction] = useState("");
+  const [draft, setDraft] = useState({ id: "", brief: "" });
+  const [status, setStatus] = useState("");
+  if (error) return <Problem text={error} />;
+  if (!data) return <p className="muted">Loading…</p>;
+  const chosen = section || sections[0]?.id || "";
+
+  async function start(kind: string, payload: Record<string, unknown>) {
+    setStatus("");
+    try {
+      await runCommand("start_job", { kind, payload });
+      go({ view: "jobs", language });
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="page">
+      <h1>Agents</h1>
+      <p className="muted">Specialists you put to work on a section or on the whole book. A <em>report</em> changes
+        nothing and is kept under Documents; <em>edits</em> become a candidate version you compare and adopt. None of
+        them decides a gate, and none has a tool: they read the book and answer.</p>
+      <div className="decide">
+        <select value={chosen} onChange={(e) => setSection(e.target.value)}>
+          {sections.map((s) => <option key={s.id} value={s.id}>{s.number ? `${s.number}. ` : ""}{s.title}</option>)}
+        </select>
+        <input placeholder="An instruction for the agent (optional)" value={instruction}
+          onChange={(e) => setInstruction(e.target.value)} />
+      </div>
+      <Problem text={status} />
+      {data.map((agent) => (
+        <div key={agent.id} className="gate">
+          <p><strong>{agent.title}</strong> <code>{agent.id}</code> <span className="muted">{agent.source}</span>
+            <span className="badge">{agent.output}</span>{agent.web && <span className="badge">reads the web</span>}</p>
+          <p>{agent.role}</p>
+          <p className="muted">Works on {agent.works_on === "section" ? "one section" : "the whole book"} · reads{" "}
+            {agent.reads.join(", ")}{agent.origin?.created_by && <> · created by the {agent.origin.created_by}</>}</p>
+          <details><summary className="muted">Its instructions</summary><p className="muted">{agent.system}</p></details>
+          <div className="actions">
+            <button onClick={() => start("run_agent", { agent: agent.id, language,
+              section: agent.works_on === "section" ? chosen : "", instruction })}>
+              {agent.works_on === "section" ? "Run on this section" : "Run on the book"}</button>
+          </div>
+        </div>
+      ))}
+      <h2>In code</h2>
+      <p className="muted">These need more than a manifest can declare (measurements, a build, a search) and are started
+        from where they act: a chapter, the Translation and Themes views, or the assistant.</p>
+      <ul className="list">{IN_CODE.map(([name, what]) => <li key={name}><strong>{name}</strong> — {what}</li>)}</ul>
+      <section className="theme">
+        <h2>A new agent</h2>
+        <p className="muted">The meta-agent designs one from your brief, out of what the others are made of: what it
+          may read, and a report or edits. It is tried once on this book before it joins the catalogue.</p>
+        <div className="decide">
+          <input placeholder="id (lowercase)" value={draft.id} onChange={(e) => setDraft({ ...draft, id: e.target.value })} />
+          <input placeholder="What it should do, and for what" value={draft.brief}
+            onChange={(e) => setDraft({ ...draft, brief: e.target.value })} />
+          <button disabled={!draft.id.trim() || !draft.brief.trim()}
+            onClick={() => start("create_agent", { id: draft.id.trim(), brief: draft.brief, language, section: chosen })}>
+            Create it</button>
+        </div>
+      </section>
     </div>
   );
 }

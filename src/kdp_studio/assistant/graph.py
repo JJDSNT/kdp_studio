@@ -48,7 +48,7 @@ VIEWS = {
     "jobs": "background jobs, with their progress and results",
     "translation": "a translated language against its source (needs language = the translated one)",
     "reader": "the built ebook, read as on a device", "templates": "the edition templates and publisher profiles",
-    "library": "the other books that can be opened",
+    "library": "the other books that can be opened", "agents": "the catalogue of agents, to run or create one",
     "publish": "what stands between a language and the publisher: freeze, builds, checks, the decision",
 }
 
@@ -89,6 +89,13 @@ PROPOSALS = {
                     "brief: what the book is and how its page should feel, `subject` = the existing theme to "
                     "start from, `text` = a web address to look at as an external reference, if the author gave "
                     "one). It is built over the specimen text and, only if it builds, joins the gallery",
+    "run_agent": "run one of the catalogue's agents (`title` = its id, read `agents` first; `section` when it "
+                 "works on a section; `instruction` optional): a fact-checker, a technical reviewer, an "
+                 "intention guardian, a continuity reviser, an art director, a KDP packager and others. A "
+                 "report is kept in the book's reports/; edits become a candidate version",
+    "create_agent": "have the meta-agent design a NEW agent when none in the catalogue does what the author needs "
+                    "(`title` = a short lowercase id, `instruction` = what it should do and for what). It is "
+                    "tried once before it is catalogued, and it can only read the book and report or propose",
     "critique_theme": "have the critic look at a theme's rendered pages (`title` = the theme) and judge them as a "
                       "book designer would: character, hierarchy, what fails in black ink, defects",
     "revise_theme": "have the designer draw one of the author's themes again (`title` = the theme; `instruction` = "
@@ -132,6 +139,9 @@ SYSTEM = (
     "the pages themselves — judges a theme with a designer's eye; its criticism is advice, shown in the gallery, "
     "and the designer can answer it (`revise_theme`). When the author asks what you think of a theme, do not "
     "improvise an opinion from its description: propose `critique_theme`. "
+    "Other agents: the catalogue (read `agents`) holds specialists you can put to work with `run_agent` — the "
+    "cover's picture and the illustrations are the art director's, not the designer's; a claim is checked by "
+    "the fact-checker, not by the researcher. Use the one whose job it is rather than answering in its place. "
     "Another language: add it, draft the glossary and let the author read it, translate ONE chapter and let "
     "the author read it in that language, and only then the rest; what the translation report measures (prompt "
     "ids, numbers, URLs, code, glossary terms) is a finding for the author to read, and whether it reads well "
@@ -337,6 +347,17 @@ def build(model: Model, studio: Studio, checkpointer=None):
             payload = {"kind": "design_theme", "payload": {"name": p["title"], "brief": p["instruction"],
                                                            "based_on": p["subject"] or "nocturne",
                                                            "reference": p["text"], "language": p["language"]}}
+        elif p["action"] == "run_agent":
+            question = (f"Pôr o agente {p['title']} para trabalhar"
+                        + (f" em {p['section']}" if p["section"] else " no livro")
+                        + (f" ({p['instruction']})" if p["instruction"] else "") + "?")
+            payload = {"kind": "run_agent", "payload": {"agent": p["title"], "language": p["language"],
+                                                        "section": p["section"], "instruction": p["instruction"]}}
+        elif p["action"] == "create_agent":
+            question = (f"Pedir ao meta-agente um agente novo, “{p['title']}”: {p['instruction']}? Ele é testado "
+                        "uma vez antes de entrar no catálogo.")
+            payload = {"kind": "create_agent", "payload": {"id": p["title"], "brief": p["instruction"],
+                                                           "language": p["language"], "section": p["section"]}}
         elif p["action"] == "critique_theme":
             question = f"Pedir ao crítico que olhe as páginas do tema {p['title']} e diga o que acha?"
             payload = {"kind": "critique_theme", "payload": {"theme": p["title"], "language": p["language"]}}
@@ -371,7 +392,7 @@ def build(model: Model, studio: Studio, checkpointer=None):
             return {"messages": [AIMessage(content="Certo, não fiz nada.")], "proposal": {}}
         jobs_ = ("revise_voice", "revise_section", "research", "plan_book", "write_section", "add_language",
                  "propose_glossary", "translate_section", "translate_book", "generate_art", "design_theme",
-                 "critique_theme", "revise_theme")
+                 "critique_theme", "revise_theme", "run_agent", "create_agent")
         command = "start_job" if p["action"] in jobs_ else p["action"]
         try:
             result = dispatch(studio.book, command, payload, AGENT)
@@ -415,7 +436,8 @@ def build(model: Model, studio: Studio, checkpointer=None):
             who = {"revise_voice": "revisor de voz", "revise_section": "revisor", "research": "pesquisador",
                    "plan_book": "arquiteto", "write_section": "redator",
                    "generate_art": "pedido de imagem", "design_theme": "designer",
-                   "revise_theme": "designer", "critique_theme": "crítico"}.get(p["action"], "tradutor")
+                   "revise_theme": "designer", "critique_theme": "crítico",
+                   "run_agent": "agente", "create_agent": "meta-agente"}.get(p["action"], "tradutor")
             return {"messages": [AIMessage(content=f"O {who} começou ({result['id']}). O resultado aparece "
                                                    "em Tarefas quando ficar pronto.")],
                     "proposal": {}, "navigate": {"view": "jobs", "language": p["language"], "section": "",

@@ -3,7 +3,7 @@
 
 export type View = "book" | "section" | "version" | "gates" | "editions" | "proofs" | "documents" | "style"
   | "continuity" | "jobs" | "plan" | "research" | "translation"
-  | "reader" | "templates" | "library" | "publish";
+  | "reader" | "templates" | "library" | "publish" | "agents";
 
 export interface Route {
   view: View;
@@ -16,7 +16,7 @@ export interface Route {
 
 const VIEWS: View[] = ["book", "section", "version", "gates", "editions", "proofs", "documents", "style",
   "continuity", "jobs", "plan", "research", "translation", "reader",
-  "templates", "library", "publish"];
+  "templates", "library", "publish", "agents"];
 
 /** The views by stage of the work, in the order a book goes through them. */
 export const STAGES: { id: string; label: string; views: View[] }[] = [

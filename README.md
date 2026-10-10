@@ -36,6 +36,7 @@ The check says so, with the measured value beside the requirement.
 | `kdp doctor` | what works here, and how to fix what does not |
 | `kdp status <book>` | structure, words, editions and gates at a glance |
 | `kdp templates` | the edition template catalogue |
+| `kdp agent list/run/create <book> [id]` | the catalogue of agents: run one on a section or the book, or have the meta-agent design a new one |
 | `kdp theme <book> [name]` | the themes (Nocturne, Folio, Signal…), or take one for every edition it covers |
 | `kdp theme <book> <new-name> --design --brief "…" [--reference URL]` | the designer draws a theme from a brief and references; it is catalogued only if it builds |
 | `kdp build <book>` | the print interior and the ebook, for every language |

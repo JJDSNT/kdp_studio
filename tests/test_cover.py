@@ -386,9 +386,11 @@ class Eye:
         verdict = self.verdicts.pop(0)
         problems = [] if verdict == "accept" else [
             {"where": "a chapter opening", "what": "the label is too faint", "why": "it vanishes in black ink",
-             "severity": "defect", "fix": "set the label in cold_dark"},
-            {"where": "the cover", "what": "the rule is timid", "why": "it reads as an accident",
-             "severity": "taste", "fix": "make it longer"}]
+             "severity": "defect", "owner": "designer", "fix": "set the label in cold_dark"},
+            {"where": "an exercise", "what": "a label is stranded at the foot of the box", "why": "it says nothing",
+             "severity": "defect", "owner": "template", "fix": "keep it with its list"},
+            {"where": "the cover", "what": "it wants a picture", "why": "the ground is empty",
+             "severity": "weakness", "owner": "art", "fix": "commission one"}]
         return {"overall": "Competent, and nobody's.", "character": "A default.", "answers_the_brief": "In part.",
                 "strengths": ["the centre line holds"], "problems": problems, "verdict": verdict}
 
@@ -409,6 +411,9 @@ def test_a_critic_looks_at_the_pages_and_the_designer_answers_it(sample, tmp_pat
     # Its criticism went back to the designer, defects first, and the new drawing was looked at too.
     assert len(model.asked) == 2 and "[defect] a chapter opening: the label is too faint" in model.asked[1]["prompt"]
     assert "You already drew this theme" in model.asked[1]["prompt"] and model.asked[1]["web"] is False
+    # What belongs to the template or to the art director is named as not the designer's, and is not counted.
+    assert "Not yours to fix" in model.asked[1]["prompt"] and "a label is stranded" in model.asked[1]["prompt"]
+    assert critic.critiques("almanac")[0]["defects"] == 1
     assert [c["verdict"] for c in result["critiques"]] == ["revise", "accept"] and result["drawings"] == 2
     assert critic.latest("almanac")["verdict"] == "accept" and len(critic.critiques("almanac")) == 2
 

@@ -284,7 +284,7 @@ class Studio:
 
     def document(self, relative: str) -> dict[str, Any]:
         path = (self.root / relative).resolve()
-        allowed = [(self.root / d).resolve() for d in (*DOCUMENTS, "research")]
+        allowed = [(self.root / d).resolve() for d in (*DOCUMENTS, "research", "reports")]
         if path.suffix != ".md" or not any(path == a or a in path.parents for a in allowed) or not path.is_file():
             raise NotFoundError(f"No document {relative!r}")
         return {"path": relative, "text": path.read_text("utf-8")}
@@ -305,6 +305,9 @@ class Studio:
         research = self.root / "research"
         if research.is_dir():
             found += [str(p.relative_to(self.root)) for p in sorted(research.glob("*.md"))]
+        reports = self.root / "reports"
+        if reports.is_dir():
+            found += [str(p.relative_to(self.root)) for p in sorted(reports.rglob("*.md"), reverse=True)]
         return found
 
     def ebook_css(self) -> str:
@@ -404,6 +407,12 @@ def create_app(root: Path | Studio, *, copilot_url: str = "", assistant_reason: 
     @app.get("/api/document")
     def document(path: str):
         return studio.document(path)
+
+    @app.get("/api/agents")
+    def agents():
+        from .agents import manifest as manifests
+
+        return [found.public_dict() for found in manifests.manifests(studio.root).values()]
 
     @app.get("/api/gallery")
     def gallery_list(lang: str, ink: str = "color"):

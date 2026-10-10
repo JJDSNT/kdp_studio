@@ -149,6 +149,15 @@ def _themes(studio: Studio, args: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _agents(studio: Studio, args: dict[str, Any]) -> str:
+    from ..agents import manifest as manifests
+
+    lines = [f"- {m.id} ({m.source}): {m.role} Works on a {m.works_on}; answers with "
+             f"{'a report (changes nothing)' if m.output == 'report' else 'edits (a candidate version)'}."
+             for m in manifests.manifests(studio.root).values()]
+    return "\n".join(lines) or "No agent in the catalogue."
+
+
 def _plans(studio: Studio, args: dict[str, Any]) -> str:
     import json as _json
 
@@ -176,6 +185,8 @@ READS: dict[str, tuple[str, str, Callable[[Studio, dict[str, Any]], str]]] = {
     "jobs": ("background jobs and their results", "", _jobs),
     "research": ("the research dossiers, or one of them", "path optional (research/<slug>.md)", _research),
     "plan": ("the latest plan the architect proposed", "", _plans),
+    "agents": ("the agents of the catalogue that can be run on a section or on the book, and what each is for",
+               "", _agents),
     "themes": ("the themes of the catalogue (built-in, the author's own, the book's), what each is, where the "
                "designer looked, and which the book uses", "", _themes),
     "translation": ("a translated language against its source: each section's state (untranslated, translated, "

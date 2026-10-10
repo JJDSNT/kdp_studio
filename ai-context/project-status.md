@@ -105,6 +105,13 @@ control room with the assistant, and it can be translated section by section.
   character and craft; one look after a theme is drawn, then the author
   decides whether the designer answers it. Themes revised and removed.
 
+- Agents as manifests (ADR 0019): thirteen more agents — interviewer,
+  fact-checker, technical reviewer, experimenter, continuity reviser,
+  intention guardian, ingestor, diagnostician, mapper, KDP packager, marketer,
+  art director, reader of the translation — each a manifest that reads the
+  book and hands back a report or edits; a meta-agent that designs new ones
+  and tries each before cataloguing it.
+
 ## Next action
 
 On *A Era dos Agentes* itself, the author's acts: `kdp language add … en`,
