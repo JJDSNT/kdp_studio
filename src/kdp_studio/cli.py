@@ -167,9 +167,17 @@ def cmd_serve(args) -> int:
 
     import uvicorn
 
-    from .server import create_app
+    from .book import BOOK_FILENAME
+    from .server import Studio, create_app
 
-    root = load_book(args.book).root
+    # A book, or a directory of books: the library the room can open from.
+    given = Path(args.book).expanduser().resolve()
+    inside = sorted(p.parent for p in given.glob(f"*/{BOOK_FILENAME}")) if given.is_dir() else []
+    if not (given / BOOK_FILENAME).is_file() and inside and not args.library:
+        root, library = inside[0], given
+    else:
+        root, library = load_book(given).root, args.library
+    studio = Studio(root, library)
     copilot_url, reason = "", ""
     if args.assistant:
         from .assistant.host import AssistantHost, unavailable_reason
@@ -183,12 +191,12 @@ def cmd_serve(args) -> int:
                     probe.bind(("127.0.0.1", 0))
                     return probe.getsockname()[1]
 
-            host = AssistantHost(root, free_port(), free_port())
+            host = AssistantHost(studio, free_port(), free_port())
             host.start()
             copilot_url = host.copilot_url
             print("  assistant on (model: " + __import__("os").environ.get("KDP_MODEL", "claude-cli") + ")")
-    app = create_app(root, copilot_url=copilot_url, assistant_reason=reason)
-    print(f"  KDP Studio: {root.name} at http://127.0.0.1:{args.port}/")
+    app = create_app(studio, copilot_url=copilot_url, assistant_reason=reason)
+    print(f"  KDP Studio: {root.name} at http://127.0.0.1:{args.port}/  (library: {studio.library})")
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
     return 0
 
@@ -555,10 +563,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("names", nargs="*")
     p.set_defaults(func=cmd_tools)
 
-    p = sub.add_parser("serve", help="the control room, on this machine")
+    p = sub.add_parser("serve", help="the control room, on this machine: a book, or a directory of books")
     p.add_argument("book", nargs="?", default=".")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--assistant", action="store_true", help="the LangGraph assistant through CopilotKit")
+    p.add_argument("--library", help="the directory of books the room can open (default: beside the book)")
     p.set_defaults(func=cmd_serve)
 
     p = sub.add_parser("compare", help="fidelity: did the words change? (Markdown or PDF)")

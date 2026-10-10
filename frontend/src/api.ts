@@ -123,7 +123,31 @@ export interface EditionState {
   check: { target: string; findings: Finding[]; summary: Record<string, number> } | null;
 }
 
+export interface LibraryBook {
+  path: string; open: boolean; id: string; title: string; author?: string; languages?: string[];
+  sections?: number; words?: number; problem?: string;
+}
+
+export interface Catalogue {
+  templates: {
+    name: string; kind: string; title: string; description: string; source: string; origin: string;
+    fonts: string[]; colors: Record<string, string>; trims: string[]; in_use: boolean;
+  }[];
+  publishers: {
+    name: string; title: string; source: string; bleed: number; spine_per_page: Record<string, number>;
+    spine_text_pages: number; barcode: number[]; ebook_pixels: number[]; dpi: number; in_use: boolean;
+  }[];
+  editions: Record<string, Record<string, unknown>>;
+  overrides: Record<string, string>;
+}
+
+export interface EpubSpine {
+  file: string; built_at: number; cover: string; spine: { href: string; title: string }[];
+}
+
 export interface Info {
+  path: string;
+  library: string;
   book: string;
   assistant: boolean;
   assistant_reason: string;
@@ -151,4 +175,10 @@ export function runCommand<T = Record<string, unknown>>(command: string, payload
   })
     .then((r) => json<{ result: T }>(r))
     .then((body) => body.result);
+}
+
+/** Open another book of the library: not a change to any book, so not a command. */
+export function openBook(path: string): Promise<{ book: string; path: string }> {
+  return fetch("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) })
+    .then((r) => json<{ book: string; path: string }>(r));
 }

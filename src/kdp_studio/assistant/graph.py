@@ -47,6 +47,8 @@ VIEWS = {
     "style": "the writing-vice findings of the whole book", "continuity": "passages that recur across sections",
     "jobs": "background jobs, with their progress and results",
     "translation": "a translated language against its source (needs language = the translated one)",
+    "reader": "the built ebook, read as on a device", "templates": "the edition templates and publisher profiles",
+    "library": "the other books that can be opened",
 }
 
 #: Changes it may propose; each is a command, confirmed by the author first.

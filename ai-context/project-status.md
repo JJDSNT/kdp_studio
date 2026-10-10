@@ -81,6 +81,10 @@ control room with the assistant, and it can be translated section by section.
   another page count fails). Verified on the sample book and on a copy of
   *A Era dos Agentes* in both languages, with a stand-in picture.
 
+- The control room opens other books (a library and one open book, ADR
+  0014), shows the template catalogue and the publisher profiles, and reads
+  the built ebook at a device's width.
+
 ## Next action
 
 On *A Era dos Agentes* itself, the author's acts: `kdp language add … en`,

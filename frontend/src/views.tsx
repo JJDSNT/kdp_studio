@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Editor from "./Editor.tsx";
 import {
-  get, runCommand, type BookOverview, type EditionState, type Finding, type Gate, type Section, type SectionEntry,
-  type TranslationReport, type VersionReport,
+  get, openBook, runCommand, type BookOverview, type Catalogue, type EditionState, type EpubSpine, type Finding,
+  type Gate, type Info, type LibraryBook, type Section, type SectionEntry, type TranslationReport, type VersionReport,
 } from "./api.ts";
 import { go, href, type Route } from "./route.ts";
 
@@ -378,6 +378,7 @@ export function EditionsView({ language }: { language: string }) {
             <button disabled={!!busy} onClick={() => act("build", edition)}>{busy === `build:${edition}` ? "Building…" : "Build and check"}</button>
             <button className="secondary" disabled={!!busy || !state.built} onClick={() => act("check", edition)}>Check again</button>
             {edition === "print" && state.built && <a href={href({ view: "proofs", language })}>Look at the pages →</a>}
+            {edition === "ebook" && state.built && <a href={href({ view: "reader", language })}>Read it →</a>}
           </div>
           {state.images.length > 0 && (
             <div className="covers">
@@ -874,6 +875,137 @@ export function ResearchView({ language }: { language: string }) {
           </tr>
         ))}
       </tbody></table>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------- library
+
+export function LibraryView() {
+  const info = useQuery(() => get<Info>("/api/info"), []);
+  const { data, error } = useQuery(() => get<LibraryBook[]>("/api/library"), []);
+  const [status, setStatus] = useState("");
+  if (error) return <Problem text={error} />;
+  if (!data) return <p className="muted">Looking for books…</p>;
+
+  async function open(path: string) {
+    try {
+      await openBook(path);
+      // Everything on the page belongs to the book that was open: start again.
+      window.location.assign("/");
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="page">
+      <h1>Library</h1>
+      <p className="muted">The books in <code>{info.data?.library}</code>. A book is a directory with a <code>book.yaml</code>;
+        one is open at a time, and work already running on another goes on. A new book starts with <code>kdp new</code>.</p>
+      <Problem text={status} />
+      {data.map((b) => (
+        <div key={b.path} className={`gate ${b.open ? "approved" : ""}`}>
+          <p><strong>{b.title}</strong>{b.author && <span className="muted"> — {b.author}</span>}
+            {b.open && <span className="badge">open</span>}</p>
+          <p className="muted"><code>{b.path}</code>
+            {b.languages && <> · {b.languages.join(", ")} · {b.sections} sections · {(b.words || 0).toLocaleString()} words</>}</p>
+          {b.problem && <p className="problem">{b.problem}</p>}
+          {!b.open && !b.problem && <button onClick={() => open(b.path)}>Open</button>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------ templates
+
+export function TemplatesView() {
+  const { data, error } = useQuery(() => get<Catalogue>("/api/templates"), []);
+  if (error) return <Problem text={error} />;
+  if (!data) return <p className="muted">Loading…</p>;
+  const kinds: [string, string][] = [["print", "Print interior"], ["ebook", "Ebook"], ["cover", "Cover"]];
+  return (
+    <div className="page">
+      <h1>Templates</h1>
+      <p className="muted">How the book looks in each medium. The book names one per edition under <code>editions</code> in
+        <code> book.yaml</code>; changing the design of a book is changing that name. Built-in templates ship with KDP Studio,
+        and a book may bring its own in <code>templates/&lt;kind&gt;/&lt;name&gt;/</code>.</p>
+      {kinds.map(([kind, label]) => (
+        <section key={kind}>
+          <h2>{label}</h2>
+          {data.templates.filter((t) => t.kind === kind).map((t) => (
+            <div key={t.name} className={`gate ${t.in_use ? "approved" : ""}`}>
+              <p><strong>{t.title}</strong> <code>{t.name}</code> <span className="muted">{t.source}</span>
+                {t.in_use && <span className="badge">used by this book</span>}</p>
+              <p>{t.description}</p>
+              <p className="muted">{t.origin}{t.fonts.length > 0 && <> · {t.fonts.join(", ")}</>}
+                {t.trims.length > 0 && <> · trims: {t.trims.join(", ")}</>}</p>
+              {Object.keys(t.colors).length > 0 && (
+                <p className="swatches">{Object.entries(t.colors).map(([name, value]) => {
+                  const shown = t.in_use && data.overrides[name] ? data.overrides[name] : value;
+                  return <span key={name} title={`${name} #${shown}${shown !== value ? " (this book's)" : ""}`}
+                    style={{ background: `#${shown}` }} />;
+                })}</p>
+              )}
+            </div>
+          ))}
+          {!data.templates.some((t) => t.kind === kind) && <p className="muted">None.</p>}
+          {!data.editions[kind] && <p className="muted">This book declares no {kind} edition.</p>}
+        </section>
+      ))}
+      <h2>Publishers</h2>
+      <p className="muted">What a publisher or printer asks of a cover: the sizes come from here and from the book's trim,
+        never from the template. A book may bring its own in <code>publishers/&lt;name&gt;.yaml</code>.</p>
+      {data.publishers.map((p) => (
+        <div key={p.name} className={`gate ${p.in_use ? "approved" : ""}`}>
+          <p><strong>{p.title}</strong> <code>{p.name}</code> <span className="muted">{p.source}</span>
+            {p.in_use && <span className="badge">used by this book</span>}</p>
+          <p className="muted">bleed {p.bleed}″ · spine per page {Object.entries(p.spine_per_page).map(([k, v]) => `${k} ${v}″`).join(", ")}
+            {" "}· spine text from {p.spine_text_pages} pages · barcode {p.barcode.join(" × ")}″ · ebook cover {p.ebook_pixels.join(" × ")} px · {p.dpi} dpi</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- reader
+
+const DEVICES: Record<string, { label: string; width: number; ink: boolean }> = {
+  phone: { label: "Phone", width: 360, ink: false },
+  ereader: { label: "E-reader (e-ink)", width: 560, ink: true },
+  tablet: { label: "Tablet", width: 820, ink: false },
+};
+
+export function ReaderView({ language }: { language: string }) {
+  const { data, error } = useQuery(() => get<EpubSpine>("/api/epub", { lang: language }), [language]);
+  const [at, setAt] = useState(0);
+  const [device, setDevice] = useState("ereader");
+  useEffect(() => setAt(0), [language]);
+  if (error) return <div className="page"><h1>Reader — {language}</h1><Problem text={error} />
+    <p><a href={href({ view: "editions", language })}>Build the ebook in Editions →</a></p></div>;
+  if (!data) return <p className="muted">Opening the ebook…</p>;
+  const page = data.spine[Math.min(at, data.spine.length - 1)];
+  const shape = DEVICES[device];
+  return (
+    <div className="page reader">
+      <h1>Reader — {language}</h1>
+      <p className="muted"><code>{data.file}</code>, built {new Date(data.built_at * 1000).toLocaleString()}. These are the
+        ebook's own files in its reading order, at a reader's width; a real reader still chooses the font and may drop
+        colours, so check on a device before publishing.</p>
+      <div className="chips">
+        {Object.entries(DEVICES).map(([id, d]) => (
+          <button key={id} className={device === id ? "" : "secondary"} onClick={() => setDevice(id)}>{d.label}</button>))}
+        <button className="secondary" disabled={at === 0} onClick={() => setAt(at - 1)}>← Previous</button>
+        <select value={at} onChange={(e) => setAt(Number(e.target.value))}>
+          {data.spine.map((item, i) => <option key={item.href} value={i}>{item.title || item.href}</option>)}
+        </select>
+        <button className="secondary" disabled={at >= data.spine.length - 1} onClick={() => setAt(at + 1)}>Next →</button>
+      </div>
+      <div className="device" style={{ width: shape.width }}>
+        <iframe key={page.href} title={page.title} src={`/epub/${language}/${page.href}?t=${data.built_at}`}
+          style={{ filter: shape.ink ? "grayscale(1)" : "none" }} />
+      </div>
     </div>
   );
 }

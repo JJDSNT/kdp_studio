@@ -44,7 +44,9 @@ def unavailable_reason() -> str:
         return getattr(error, "message", str(error))
 
 
-def agent_app(root: Path):
+def agent_app(root):
+    """`root` is a book's path, or the control room's Studio so both follow the open book."""
+
     from ag_ui_langgraph import LangGraphAgent, add_langgraph_fastapi_endpoint
     from fastapi import FastAPI
     from langgraph.checkpoint.memory import MemorySaver
@@ -58,14 +60,14 @@ def agent_app(root: Path):
     # turn; name the type rather than rely on a default LangGraph will close.
     serde = JsonPlusSerializer(allowed_msgpack_modules=[("ag_ui._generated.models", "Context"),
                                                         ("ag_ui.core.types", "Context")])
-    graph = build(model_from_env(), Studio(root), MemorySaver(serde=serde))
+    graph = build(model_from_env(), root if isinstance(root, Studio) else Studio(root), MemorySaver(serde=serde))
     application = FastAPI(title="KDP Studio assistant")
     add_langgraph_fastapi_endpoint(application, LangGraphAgent(name="assistant", graph=graph), "/")
     return application
 
 
 class AssistantHost:
-    def __init__(self, root: Path, agent_port: int, copilot_port: int) -> None:
+    def __init__(self, root, agent_port: int, copilot_port: int) -> None:
         self.root = root
         self.agent_port = agent_port
         self.copilot_port = copilot_port

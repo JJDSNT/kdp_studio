@@ -52,7 +52,7 @@ The check says so, with the measured value beside the requirement.
 | `kdp translate <book> <language> [section]` | the translator: one section, or every pending one, as candidate versions |
 | `kdp translation <book>` | a translated language measured against its source, and what went stale |
 | `kdp tools [install <name>]` | open tools used as resources: Vale, LanguageTool, EPUBCheck |
-| `kdp serve <book> [--assistant]` | the control room in the browser, with the assistant |
+| `kdp serve <book or directory of books> [--assistant] [--library dir]` | the control room in the browser: the open book, the others it can open, the assistant |
 
 ## Why this exists
 

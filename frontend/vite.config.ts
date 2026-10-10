@@ -12,6 +12,8 @@ export default defineConfig({
       "/api": "http://127.0.0.1:8765",
       "/proofs": "http://127.0.0.1:8765",
       "/ebook.css": "http://127.0.0.1:8765",
+      "/epub": "http://127.0.0.1:8765",
+      "/covers": "http://127.0.0.1:8765",
     },
   },
 });

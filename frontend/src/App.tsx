@@ -2,8 +2,8 @@ import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { get, type BookOverview, type Info, type SectionEntry } from "./api.ts";
 import { go, href, parse, type Route } from "./route.ts";
 import {
-  BookView, ContinuityView, DocumentsView, EditionsView, GatesView, JobsView, PlanView, ProofsView, ResearchView,
-  SectionView, StyleView, TranslationView, VersionView, useQuery,
+  BookView, ContinuityView, DocumentsView, EditionsView, GatesView, JobsView, LibraryView, PlanView, ProofsView,
+  ReaderView, ResearchView, SectionView, StyleView, TemplatesView, TranslationView, VersionView, useQuery,
 } from "./views.tsx";
 import type { Navigation } from "./Assistant.tsx";
 
@@ -42,9 +42,10 @@ export default function App() {
     <div className={`room ${assistant && assistantOpen ? "with-assistant" : ""}`}>
       <header>
         <a className="brand" href={href({ view: "book", language })}>KDP Studio</a>
-        <span className="book-title">{data.languages[language].title}</span>
+        <a className="book-title" href={href({ view: "library", language })} title="Open another book">
+          {data.languages[language].title} ▾</a>
         <nav>
-          {(["book", "research", "plan", "style", "continuity", "translation", "gates", "jobs", "editions", "proofs", "documents"] as const).map((view) => (
+          {(["book", "research", "plan", "style", "continuity", "translation", "gates", "jobs", "editions", "proofs", "reader", "templates", "documents"] as const).map((view) => (
             <a key={view} className={route.view === view ? "active" : ""} href={href({ view, language })}>{view}</a>
           ))}
         </nav>
@@ -81,13 +82,16 @@ export default function App() {
         {route.view === "continuity" && <ContinuityView language={language} />}
         {route.view === "translation" && <TranslationView book={data} language={language} onChanged={book.reload} />}
         {route.view === "jobs" && <JobsView language={language} />}
+        {route.view === "reader" && <ReaderView language={language} />}
+        {route.view === "templates" && <TemplatesView />}
+        {route.view === "library" && <LibraryView />}
         {route.view === "plan" && <PlanView book={data} language={language} onChanged={book.reload} />}
         {route.view === "research" && <ResearchView language={language} />}
       </main>
       {assistant && assistantOpen && (
         <aside className="assistant">
           <Suspense fallback={<p className="muted">Opening the assistant…</p>}>
-            <Assistant route={{ ...route, language }} title={data.languages[language].title} onNavigate={onNavigate} />
+            <Assistant route={{ ...route, language }} title={data.languages[language].title} book={data.id} onNavigate={onNavigate} />
           </Suspense>
         </aside>
       )}

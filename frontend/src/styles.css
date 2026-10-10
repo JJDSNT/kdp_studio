@@ -132,3 +132,7 @@ mark { background: #fbefd9; }
 header nav { flex-wrap: wrap; }
 .covers { display: flex; gap: 1em; align-items: flex-end; margin: .8em 0; }
 .covers img { height: 260px; border: 1px solid var(--rule, #ddd); }
+.swatches span { display: inline-block; width: 1.5em; height: 1.5em; margin-right: .25em; border: 1px solid #0002; border-radius: 3px; }
+.reader .device { margin: 1em auto; border: 10px solid #23282d; border-radius: 14px; background: white; }
+.reader .device iframe { display: block; width: 100%; height: 76vh; border: 0; background: white; }
+.book-title { color: inherit; }

@@ -20,11 +20,13 @@ export interface Navigation {
 interface Props {
   route: Route;
   title: string;
+  /** The open book: a conversation belongs to one book. */
+  book: string;
   onNavigate: (where: Navigation) => void;
 }
 
-function threadId(): string {
-  const key = "kdp-studio:assistant-thread";
+function threadId(book: string): string {
+  const key = `kdp-studio:assistant-thread:${book}`;
   try {
     const known = sessionStorage.getItem(key);
     if (known) return known;
@@ -81,7 +83,7 @@ function Conversation({ route, title, onNavigate, thread }: Props & { thread: st
 }
 
 export default function Assistant(props: Props) {
-  const thread = useRef(threadId()).current;
+  const thread = useRef(threadId(props.book)).current;
   return (
     // The development inspector fetches from outside the machine: off.
     <CopilotKitProvider runtimeUrl="/api/copilotkit" enableInspector={false}>

@@ -245,3 +245,36 @@ def test_the_control_room_shows_a_translation_against_its_source(bilingual):
     assert overview["languages"]["pt-BR"]["contents"][0]["translation"] == "untranslated"
     assert overview["languages"]["en"]["contents"][0]["translation"] is None
     assert client.get("/api/translation", params={"lang": "en"}).status_code == 422
+
+
+def test_the_room_opens_another_book_shows_the_catalogue_and_reads_the_ebook(sample, tmp_path):
+    pytest.importorskip("fastapi")
+    import shutil
+
+    from fastapi.testclient import TestClient
+
+    from kdp_studio.build import build_ebook
+    from kdp_studio.server import create_app
+
+    other = sample.parent / "other-book"
+    shutil.copytree(sample, other)
+    (other / "book.yaml").write_text((other / "book.yaml").read_text().replace("id: sample-book", "id: other-book"))
+    client = TestClient(create_app(sample))
+    books = {b["id"]: b for b in client.get("/api/library").json()}
+    assert books["sample-book"]["open"] and not books["other-book"]["open"] and books["other-book"]["sections"] == 4
+    assert client.post("/api/open", json={"path": str(tmp_path)}).status_code == 404
+    assert client.post("/api/open", json={"path": str(other)}).json()["book"] == "other-book"
+    assert client.get("/api/book").json()["id"] == "other-book"
+
+    found = client.get("/api/templates").json()
+    used = {(t["kind"], t["name"]) for t in found["templates"] if t["in_use"]}
+    assert used == {("print", "nocturne"), ("ebook", "nocturne"), ("cover", "nocturne")}
+    assert found["publishers"][0]["name"] == "kdp" and found["publishers"][0]["in_use"]
+
+    assert client.get("/api/epub", params={"lang": "en"}).status_code == 404
+    build_ebook(load_book(other), "en")
+    spine = client.get("/api/epub", params={"lang": "en"}).json()["spine"]
+    assert spine[0]["href"] == "title.xhtml" and any("first-light" in item["href"] for item in spine)
+    page = client.get(f"/epub/en/{spine[-1]['href']}")
+    assert page.headers["content-type"].startswith("application/xhtml+xml") and "<html" in page.text
+    assert client.get("/epub/en/style.css").status_code == 200 and client.get("/epub/en/nope.xhtml").status_code == 404

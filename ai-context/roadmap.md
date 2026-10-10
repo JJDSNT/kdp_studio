@@ -80,8 +80,8 @@ Later (noted 2026-10-04, at the author's request — not now):
   components into per-language catalogues, starting with en and pt-BR). The
   interface language is independent of the book's language.
 
-- **An OPDS catalogue.** The built ebooks served over OPDS (from `kdp serve`
-  or a small server of its own), so the author reads each new build on a
+- **An OPDS catalogue.** The built ebooks served over OPDS (from `kdp serve`,
+  over the library it already knows — ADR 0014 — or a small server of its own), so the author reads each new build on a
   reader or phone without downloading files by hand. One feed per book,
   an entry per language, updated at each build.
 

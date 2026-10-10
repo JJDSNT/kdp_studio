@@ -43,10 +43,119 @@ def person() -> Actor:
 
 
 class Studio:
-    """Queries over one book. Every call reloads it: the files are the truth."""
+    """Queries over the open book. Every call reloads it: the files are the truth.
 
-    def __init__(self, root: Path) -> None:
+    A runtime has one book open at a time and a *library*: the directory whose
+    books it can open (the open book's neighbours, by default). Opening another
+    is not a change to any book; jobs already running go on with theirs.
+    """
+
+    def __init__(self, root: Path, library: Path | None = None) -> None:
         self.root = load_book(root).root
+        self.library = (Path(library).expanduser().resolve() if library else self.root.parent)
+        self._reconciled: set[Path] = set()
+
+    def books(self) -> list[dict[str, Any]]:
+        """The books of the library, and the open one wherever it lives."""
+
+        roots = {self.root}
+        if self.library.is_dir():
+            roots |= {p.parent.resolve() for p in self.library.glob("*/book.yaml")}
+        found = []
+        for root in sorted(roots, key=lambda p: p.name):
+            entry: dict[str, Any] = {"path": str(root), "open": root == self.root}
+            try:
+                book = load_book(root)
+                sections = book.sections(book.source_language)
+                entry.update(id=book.id, title=book.title(book.source_language), author=book.author,
+                             languages=book.languages, sections=len(sections), words=sum(s.words for s in sections))
+            except KdpStudioError as error:
+                entry.update(id=root.name, title=root.name, problem=error.message)
+            found.append(entry)
+        return found
+
+    def open(self, path: str) -> dict[str, Any]:
+        wanted = Path(path).expanduser().resolve()
+        if str(wanted) not in {b["path"] for b in self.books()}:
+            raise NotFoundError(f"No book at {path} in the library {self.library}")
+        self.root = load_book(wanted).root
+        self.reconcile()
+        return {"book": self.book.id, "path": str(self.root)}
+
+    def reconcile(self) -> None:
+        """Once per book and runtime: a job this runtime started is still running."""
+
+        from . import jobs
+
+        if self.root not in self._reconciled:
+            self._reconciled.add(self.root)
+            jobs.reconcile(self.book)
+
+    def catalogue(self) -> dict[str, Any]:
+        """Edition templates and publisher profiles, with what this book uses."""
+
+        from .cover import publishers
+
+        book = self.book
+        used = {kind: str(settings.get("template", "")) for kind, settings in book.editions.items()}
+        chosen = str((book.editions.get("cover") or {}).get("publisher", "kdp"))
+        templates = [{"name": t.name, "kind": t.kind, "title": t.title, "description": t.description,
+                      "source": t.source, "origin": str(t.meta.get("origin", "")),
+                      "fonts": list(t.meta.get("fonts") or []), "colors": dict(t.meta.get("colors") or {}),
+                      "trims": sorted(t.meta.get("trims") or {}), "in_use": used.get(t.kind) == t.name}
+                     for t in catalog.catalog(book.root)]
+        profiles = [{"name": p.name, "title": p.title, "source": p.source, "bleed": p.bleed,
+                     "spine_per_page": p.spine_per_page, "spine_text_pages": p.spine_text_pages,
+                     "barcode": list(p.barcode_size), "ebook_pixels": list(p.ebook_pixels), "dpi": p.dpi,
+                     "in_use": "cover" in book.editions and p.name == chosen}
+                    for p in publishers(book.root).values()]
+        return {"templates": templates, "publishers": profiles, "editions": book.editions,
+                "overrides": (book.manifest.get("design") or {}).get("colors") or {}}
+
+    # ------------------------------------------------------------ the ebook, read
+
+    def _epub(self, language: str) -> Path:
+        found = sorted(build_dir(self.book, language, "ebook").glob("*.epub"))
+        if not found:
+            raise NotFoundError(f"The {language} ebook is not built")
+        return found[0]
+
+    def epub_spine(self, language: str) -> dict[str, Any]:
+        """The reading order of the built ebook, as a reader would follow it."""
+
+        import zipfile
+        from xml.etree import ElementTree as ET
+
+        path = self._epub(language)
+        opf, xhtml = "{http://www.idpf.org/2007/opf}", "{http://www.w3.org/1999/xhtml}"
+        with zipfile.ZipFile(path) as epub:
+            package = ET.fromstring(epub.read("OEBPS/content.opf"))
+            nav = ET.fromstring(epub.read("OEBPS/nav.xhtml"))
+            hrefs = {item.get("id"): item.get("href") for item in package.iter(f"{opf}item")}
+            labels = {a.get("href"): "".join(a.itertext()).strip() for a in nav.iter(f"{xhtml}a")}
+            # A page the contents do not list (the title page) is named by its own <title>.
+            for href in hrefs.values():
+                if href and href.endswith(".xhtml") and href not in labels:
+                    title = ET.fromstring(epub.read(f"OEBPS/{href}")).find(f"{xhtml}head/{xhtml}title")
+                    labels[href] = (title.text or "").strip() if title is not None else ""
+        cover = next((item.get("href") for item in package.iter(f"{opf}item")
+                      if "cover-image" in (item.get("properties") or "")), "")
+        spine = [{"href": hrefs[ref.get("idref")], "title": labels.get(hrefs[ref.get("idref")], "")}
+                 for ref in package.iter(f"{opf}itemref") if hrefs.get(ref.get("idref"))]
+        return {"file": str(path.relative_to(self.root)), "built_at": path.stat().st_mtime, "cover": cover,
+                "spine": spine}
+
+    def epub_file(self, language: str, name: str) -> tuple[bytes, str]:
+        import mimetypes
+        import zipfile
+
+        with zipfile.ZipFile(self._epub(language)) as epub:
+            try:
+                data = epub.read(f"OEBPS/{name}")
+            except KeyError:
+                raise NotFoundError(f"The ebook has no {name!r}") from None
+        kind = "application/xhtml+xml" if name.endswith(".xhtml") else mimetypes.guess_type(name)[0]
+        return data, kind or "application/octet-stream"
 
     @property
     def book(self) -> Book:
@@ -188,18 +297,17 @@ class Studio:
         return dispatch(self.book, name, payload, actor)
 
 
-def create_app(root: Path, *, copilot_url: str = "", assistant_reason: str = "") -> Any:
+def create_app(root: Path | Studio, *, copilot_url: str = "", assistant_reason: str = "") -> Any:
     try:
         from fastapi import FastAPI
-        from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
+        from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
         from fastapi.staticfiles import StaticFiles
     except ImportError as error:
         raise ToolUnavailableError("The control room needs the studio extra: uv sync --extra studio") from error
 
-    studio = Studio(root)
-    from . import jobs
-
-    jobs.reconcile(studio.book)
+    # The assistant, when on, shares this Studio: opening another book moves both.
+    studio = root if isinstance(root, Studio) else Studio(root)
+    studio.reconcile()
     app = FastAPI(title="KDP Studio")
     app.state.studio = studio
 
@@ -210,7 +318,27 @@ def create_app(root: Path, *, copilot_url: str = "", assistant_reason: str = "")
     @app.get("/api/info")
     def info():
         return {"book": studio.book.id, "assistant": bool(copilot_url), "assistant_reason": assistant_reason,
-                "person": person().public_dict()}
+                "person": person().public_dict(), "path": str(studio.root), "library": str(studio.library)}
+
+    @app.get("/api/library")
+    def library():
+        return studio.books()
+
+    @app.post("/api/open")
+    async def open_book(request: Request):
+        body = await request.json()
+        if not isinstance(body, dict) or not body.get("path"):
+            raise ValidationError("Opening a book needs its path")
+        return studio.open(str(body["path"]))
+
+    @app.get("/api/epub")
+    def epub(lang: str):
+        return studio.epub_spine(lang)
+
+    @app.get("/epub/{lang}/{name:path}")
+    def epub_file(lang: str, name: str):
+        data, kind = studio.epub_file(lang, name)
+        return Response(data, media_type=kind, headers={"Cache-Control": "no-store"})
 
     @app.get("/api/book")
     def book():
@@ -260,8 +388,7 @@ def create_app(root: Path, *, copilot_url: str = "", assistant_reason: str = "")
 
     @app.get("/api/templates")
     def templates():
-        return [{"name": t.name, "kind": t.kind, "title": t.title, "description": t.description, "source": t.source}
-                for t in catalog.catalog(studio.root)]
+        return studio.catalogue()
 
     @app.get("/api/style")
     def style(lang: str, section: str | None = None, engines: bool = False):
