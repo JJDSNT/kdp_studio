@@ -209,13 +209,17 @@ class Manifest:
     web: bool = False
     scope: str = "content"
     knowledge: tuple[str, ...] = ()
+    #: Named checks the answer must pass before it lands, and how many answers it gets to pass them.
+    checks: tuple[str, ...] = ()
+    attempts: int = 2
     source: str = "built-in"
     origin: dict[str, Any] = field(default_factory=dict)
 
     def public_dict(self) -> dict[str, Any]:
         return {"id": self.id, "title": self.title, "role": self.role, "works_on": self.works_on,
                 "reads": list(self.reads), "output": self.output, "web": self.web, "scope": self.scope,
-                "knowledge": list(self.knowledge), "source": self.source, "origin": self.origin,
+                "knowledge": list(self.knowledge), "checks": list(self.checks), "attempts": self.attempts,
+                "source": self.source, "origin": self.origin,
                 "system": self.system}
 
 
@@ -261,9 +265,17 @@ def parse(data: Any, source: str = "") -> Manifest:
         raise ValidationError(f"Agent {agent_id}: `system` must say who the agent is and how it judges")
     if not str(data.get("role", "")).strip():
         raise ValidationError(f"Agent {agent_id}: `role` says in one line what it is for")
+    default = (["edits_apply"] + (["facts_unchanged"] if scope == "wording" else [])) if output == "edits" \
+        else ["report_complete"]
+    checks = tuple(str(c) for c in (data.get("checks") if data.get("checks") is not None else default))
+    unknown = [c for c in checks if c not in CHECKS]
+    if unknown:
+        raise ValidationError(f"Agent {agent_id}: no check named {', '.join(unknown)}", checks=sorted(CHECKS))
+    if output == "report" and any(c in ("edits_apply", "facts_unchanged") for c in checks):
+        raise ValidationError(f"Agent {agent_id}: those checks are for edits, and it answers with a report")
     return Manifest(agent_id, str(data.get("title") or agent_id), str(data["role"]).strip(), works_on, reads, system,
                     output, bool(data.get("web", False)), scope, tuple(str(k) for k in data.get("knowledge") or []),
-                    source, dict(data.get("origin") or {}))
+                    checks, max(1, min(int(data.get("attempts", 2)), 4)), source, dict(data.get("origin") or {}))
 
 
 def manifests(book_root: Path | None = None) -> dict[str, Manifest]:
@@ -328,10 +340,161 @@ def report_markdown(manifest: Manifest, language: str, section: str, answer: dic
     return "\n".join(lines)
 
 
+REVIEW_SYSTEM = (
+    "You review the work of another agent of a book production tool: you are its critic, not its colleague. You "
+    "are given the role it was asked to play, what it was shown, and what it answered. Judge the answer against "
+    "the role: did it do the job, or a neighbouring one; is each point specific — a passage quoted, a reason — "
+    "or generic advice that would fit any book; did it guess where it should have said it could not establish; "
+    "did it miss what a careful reader of the same material would have seen; did it stay inside its scope. For "
+    "edits, judge each change: does it serve the declared purpose, and does it leave the author's voice and "
+    "facts alone. Do not redo the work. `verdict` is `accept` when the author can rely on it as it is, else "
+    "`revise`; each problem has a `fix` the agent can act on. Write for the author, in their language."
+)
+
+REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "overall": {"type": "string"},
+        "problems": {"type": "array", "items": {"type": "object", "properties": {
+            "what": {"type": "string"}, "why": {"type": "string"}, "fix": {"type": "string"}},
+            "required": ["what", "why", "fix"]}},
+        "verdict": {"type": "string", "enum": ["accept", "revise"]},
+    },
+    "required": ["overall", "problems", "verdict"],
+}
+
+
+def _edits_apply(work: "ManifestWork", draft: dict[str, Any]) -> list[str]:
+    from .edits import apply_edits
+
+    edits = draft.get("edits") or []
+    if not edits:
+        return []  # deciding to change nothing is an answer
+    _, applied, refused = apply_edits(read_section(work.book, work.language, work.section)["text"], edits)
+    if applied:
+        return []
+    return ["None of your edits could be applied: " + "; ".join(
+        f"“{str(r.get('find', ''))[:60]}” — {r['reason']}" for r in refused[:6])
+        + ". `find` must be copied exactly from the section and occur once."]
+
+
+def _facts_unchanged(work: "ManifestWork", draft: dict[str, Any]) -> list[str]:
+    from ..fidelity import compare
+    from .edits import apply_edits
+
+    current = read_section(work.book, work.language, work.section)["text"]
+    revised, applied, _ = apply_edits(current, draft.get("edits") or [])
+    if not applied:
+        return []
+    found = compare(current, revised)
+    moved = [f"removed {kind_} “{value}”" for kind_, value, _ in found.facts_removed] \
+        + [f"added {kind_} “{value}”" for kind_, value, _ in found.facts_added]
+    return ["Your edits change facts, which this scope forbids: " + "; ".join(moved[:10])] if moved else []
+
+
+def _report_complete(work: "ManifestWork", draft: dict[str, Any]) -> list[str]:
+    if str(draft.get("body", "")).strip() and str(draft.get("summary", "")).strip():
+        return []
+    return ["The report has no summary or no body: say what you found, or what you could not establish."]
+
+
+#: Checks a manifest may name: each says, from the answer alone, why it may not land.
+CHECKS: dict[str, Callable[["ManifestWork", dict[str, Any]], list[str]]] = {
+    "edits_apply": _edits_apply, "facts_unchanged": _facts_unchanged, "report_complete": _report_complete,
+}
+
+
+class ManifestWork:
+    """A manifest agent's work, as the flow drives it."""
+
+    can_review = True
+
+    def __init__(self, book: Book, manifest: Manifest, *, language: str, section: str, instruction: str,
+                 model: Model, reviewer: Model | None = None, save: bool = True) -> None:
+        self.book, self.manifest, self.language, self.section = book, manifest, language, section
+        self.instruction, self.model, self.reviewer, self.save = instruction, model, reviewer or model, save
+        self.title, self.attempts = manifest.title, manifest.attempts
+        self.actor = Actor(manifest.id, "agent")
+        self.shown = (context(manifest, book, language, section)
+                      + f"\n\nThe task, in the author's words:\n{instruction.strip() or '(none: do what your role says)'}"
+                      + f"\n\nWrite in {language}.")
+        self.landed: dict[str, Any] = {}
+
+    def draft(self, request: str, standing: dict[str, Any] | None, error: str) -> dict[str, Any]:
+        import json
+
+        prompt = self.shown
+        if standing:
+            prompt += ("\n\nYou already answered this. Your answer was:\n" + json.dumps(standing, ensure_ascii=False)
+                       + f"\n\nDo it again, in full, changing what this asks and keeping the rest:\n{request}")
+        if error:
+            prompt += f"\n\nYour last answer could not be used. Fix it and answer again in full.\nWhy:\n{error}"
+        if self.manifest.output == "edits":
+            system = (self.manifest.system + f" The declared scope is `{self.manifest.scope}`: "
+                      f"{SCOPES[self.manifest.scope]}. " + EDITS_RULES)
+            return clean(self.model.ask(system, prompt, EDITS_SCHEMA, web=self.manifest.web))
+        return self.model.ask(self.manifest.system + REPORT_RULES, prompt, REPORT_SCHEMA, web=self.manifest.web)
+
+    def check(self, draft: dict[str, Any]) -> list[str]:
+        return [problem for name in self.manifest.checks for problem in CHECKS[name](self, draft)]
+
+    def failure(self, problems: list[str], standing: dict[str, Any] | None) -> ValidationError:
+        return ValidationError(f"{self.manifest.title} could not give an answer that may be used, after "
+                               f"{self.attempts} attempt(s): " + " ".join(problems)[:500])
+
+    def land(self, draft: dict[str, Any]) -> dict[str, Any]:
+        from ..commands import dispatch
+
+        base = {"agent": self.manifest.id, "section": self.section, "language": self.language}
+        if self.manifest.output == "edits":
+            result = record(self.book, self.language, self.section, draft, agent=self.actor,
+                            scope=self.manifest.scope,
+                            rationale=f"{self.manifest.title}: " + (self.instruction.strip() or self.manifest.role),
+                            task={"agent": self.manifest.id, "instruction": self.instruction})
+            result.pop("candidate", None)
+            self.landed = {**result, **base}
+            return self.landed
+        findings = draft.get("findings") or []
+        self.landed = {**base, "summary": str(draft.get("summary", "")), "findings": findings,
+                       "could_not": draft.get("could_not") or [], "path": "",
+                       "problems": sum(1 for f in findings if f.get("severity") == "problem")}
+        if self.save:
+            self.landed["path"] = dispatch(self.book, "add_report", {
+                "agent": self.manifest.id, "subject": self.section or "book", "language": self.language,
+                "text": report_markdown(self.manifest, self.language, self.section, draft)}, self.actor)["path"]
+        else:  # a trial: what it would say, kept nowhere
+            self.landed["body"] = draft.get("body", "")
+        return self.landed
+
+    def review(self, outcome: dict[str, Any]) -> dict[str, Any]:
+        """Another look at what landed, by a critic that is told the role and shown the same material."""
+
+        import json
+
+        kept = ("summary", "findings", "could_not", "applied", "refused", "skipped")
+        answered = {k: v for k, v in outcome.items() if k in kept}
+        prompt = (f"The agent: {self.manifest.title}. Its role: {self.manifest.role}\nIts instructions:\n"
+                  f"{self.manifest.system}\n\nWhat it was shown:\n{self.shown}\n\nWhat it answered:\n"
+                  + json.dumps(answered, ensure_ascii=False, indent=1))
+        seen = self.reviewer.ask(REVIEW_SYSTEM, prompt, REVIEW_SCHEMA)
+        problems = seen.get("problems") or []
+        return {"verdict": seen["verdict"], "overall": seen["overall"], "problems": problems,
+                "instruction": "A reviewer read your answer. " + str(seen["overall"]) + "\nWhat to change:\n"
+                               + "\n".join(f"- {p['what']} ({p['why']}) Fix: {p['fix']}" for p in problems),
+                "summary": f"The reviewer says {seen['verdict']}: " + str(seen["overall"])[:300]}
+
+    def result(self, state: dict[str, Any]) -> dict[str, Any]:
+        return {**self.landed, "answers": state.get("drawings", 0),
+                "reviews": [{k: v[k] for k in ("verdict", "overall", "problems")} for v in state.get("reviews") or []]}
+
+
 def run(book: Book, agent_id: str, *, language: str = "", section: str = "", instruction: str = "",
-        model: Model | None = None, manifest: Manifest | None = None, save: bool = True,
+        model: Model | None = None, reviewer: Model | None = None, manifest: Manifest | None = None,
+        save: bool = True, interactive: bool = False, script: list[str] | None = None,
         progress=lambda message: None) -> dict[str, Any]:
-    from ..commands import dispatch
+    """Put a manifest agent to work, on the flow every agent uses (agents/flow.py)."""
+
+    from .flow import Flow, hold_for_job
 
     manifest = manifest or get(agent_id, book.root)
     language = language or book.source_language
@@ -342,40 +505,18 @@ def run(book: Book, agent_id: str, *, language: str = "", section: str = "", ins
             raise NotFoundError(f"No section {section!r} in {language}")
     else:
         section = ""
-    actor = Actor(manifest.id, "agent")
-    prompt = (context(manifest, book, language, section)
-              + f"\n\nThe task, in the author's words:\n{instruction.strip() or '(none: do what your role says)'}"
-              + f"\n\nWrite in {language}.")
-    progress(f"{manifest.title}: reading" + (f" {section}" if section else " the book"))
-    chosen = model or model_from_env()
-    if manifest.output == "edits":
-        system = (manifest.system + f" The declared scope is `{manifest.scope}`: {SCOPES[manifest.scope]}. "
-                  + EDITS_RULES)
-        answer = clean(chosen.ask(system, prompt, EDITS_SCHEMA, web=manifest.web))
-        result = record(book, language, section, answer, agent=actor, scope=manifest.scope,
-                        rationale=f"{manifest.title}: " + (instruction.strip() or manifest.role),
-                        task={"agent": manifest.id, "instruction": instruction})
-        result.pop("candidate", None)
-        progress(f"{result['applied']} edit(s)" + (f": version {result['version']}" if result.get("version") else ""))
-        return {**result, "agent": manifest.id, "section": section, "language": language}
-    answer = chosen.ask(manifest.system + REPORT_RULES, prompt, REPORT_SCHEMA, web=manifest.web)
-    findings = answer.get("findings") or []
-    outcome = {"agent": manifest.id, "section": section, "language": language,
-               "summary": str(answer.get("summary", "")), "findings": findings,
-               "could_not": answer.get("could_not") or [],
-               "problems": sum(1 for f in findings if f.get("severity") == "problem")}
-    if not save:  # a trial: what it would say, kept nowhere
-        return {**outcome, "body": answer.get("body", ""), "path": ""}
-    saved = dispatch(book, "add_report", {"agent": manifest.id, "subject": section or "book", "language": language,
-                                          "text": report_markdown(manifest, language, section, answer)}, actor)
-    progress(f"Report kept in {saved['path']}")
-    return {**outcome, "path": saved["path"]}
+    work = ManifestWork(book, manifest, language=language, section=section, instruction=instruction,
+                        model=model or model_from_env(), reviewer=reviewer, save=save)
+    flow = Flow(work, interactive=interactive, script=script, progress=progress)
+    hold_for_job(progress, flow)
+    return flow.start()
 
 
 @kind("run_agent", "Run one of the catalogue's agents on a section or on the book: a report, or a candidate version")
 def run_agent_job(book: Book, payload: dict[str, Any], actor: Actor, progress: Progress) -> dict[str, Any]:
     return run(book, payload["agent"], language=payload.get("language", ""), section=payload.get("section", ""),
-               instruction=payload.get("instruction", ""), progress=progress)
+               instruction=payload.get("instruction", ""), interactive=True,
+               script=["critique"] if payload.get("critique") else None, progress=progress)
 
 
 def template(manifest: dict[str, Any]) -> str:

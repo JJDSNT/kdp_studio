@@ -481,6 +481,16 @@ def create_app(root: Path | Studio, *, copilot_url: str = "", assistant_reason: 
 
         return jobs.list_jobs(studio.book)
 
+    @app.post("/api/jobs/answer")
+    async def job_answer(request: Request):
+        # The author's answer to work that is held: critique it, redo it, or close it.
+        from . import jobs
+
+        body = await request.json()
+        if not isinstance(body, dict) or not body.get("id") or not body.get("action"):
+            raise ValidationError("An answer names the job and what to do")
+        return jobs.answer(studio.book, str(body["id"]), str(body["action"]), str(body.get("instruction") or ""))
+
     @app.get("/ebook.css")
     def ebook_css():
         return PlainTextResponse(studio.ebook_css(), media_type="text/css")

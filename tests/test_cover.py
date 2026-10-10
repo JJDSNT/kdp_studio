@@ -339,7 +339,7 @@ def test_the_designer_s_theme_is_built_before_it_is_catalogued_and_travels_with_
     result = design_theme(load_book(sample), "almanac", "A field guide: calm, green, centred.", based_on="nocturne",
                           reference="https://example.org/a-template", model=model)
     assert model.asked[0]["web"] is True and "Installed font families" in model.asked[0]["prompt"]
-    assert result["attempts"] == 1 and result["references"][0]["license"] == ""
+    assert result["drawings"] == 1 and result["references"][0]["license"] == ""
     found = {t["name"]: t for t in gallery.themes(sample)}["almanac"]
     assert found["source"] == "yours" and found["designed_by"] == "designer" and found["based_on"] == "nocturne"
     assert found["inspired_by"][0]["taken"] == "the centred chapter head; no code"
@@ -431,6 +431,15 @@ def test_a_critic_looks_at_the_pages_and_the_designer_answers_it(sample, tmp_pat
     quiet, once = Drawer("almanac"), Eye("revise")
     seen = revise_theme(book, "almanac", "smaller title", model=quiet, critic=once, look=True)
     assert len(quiet.asked) == 1 and len(once.seen) == 1 and seen["critiques"][0]["verdict"] == "revise"
+    # In the control room the work is held: the author critiques and redoes as often as they like.
+    from kdp_studio.agents.designer import design_theme as draw
+
+    drawer, eye2 = Drawer("fieldbook"), Eye("revise", "accept")
+    held = draw(book, "fieldbook", "A field guide.", model=drawer, critic=eye2, interactive=True)
+    assert held["waiting"]["reviewed"] is False and len(drawer.asked) == 1 and eye2.seen == []
+    from kdp_studio.agents.flow import Flow  # noqa: F401 - the flow is what holds it
+
+    assert remove_theme("fieldbook")["removed"] == ["print", "ebook", "cover"]
     assert remove_theme("almanac")["removed"] == ["print", "ebook", "cover"]
     assert "almanac" not in {t["name"] for t in gallery.themes(sample)}
     with pytest.raises(ValidationError, match="cannot be removed"):

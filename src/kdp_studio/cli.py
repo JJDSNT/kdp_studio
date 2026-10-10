@@ -465,7 +465,7 @@ def cmd_theme(args) -> int:
                                                     "look": args.critique}, _actor(), wait=True)
         else:
             job = jobs.start(book, "critique_theme", {"theme": args.theme}, _actor(), wait=True)
-        if job["state"] != "done":
+        if job["state"] not in ("done", "waiting"):
             print(f"error: {job['error']}", file=sys.stderr)
             return 1
         result = job["result"]
@@ -494,7 +494,7 @@ def cmd_theme(args) -> int:
         job = jobs.start(book, "design_theme", {"name": args.theme, "brief": args.brief, "based_on": args.based_on,
                                                 "reference": args.reference or "",
                                                 "look": not args.no_critic}, _actor(), wait=True)
-        if job["state"] != "done":
+        if job["state"] not in ("done", "waiting"):
             print(f"error: {job['error']}", file=sys.stderr)
             return 1
         result = job["result"]
@@ -552,9 +552,9 @@ def cmd_agent(args) -> int:
                                                 "section": args.section or ""}, _actor(), wait=True)
     else:
         job = jobs.start(book, "run_agent", {"agent": args.name, "language": args.lang or "",
-                                             "section": args.section or "", "instruction": args.instruction or ""},
-                         _actor(), wait=True)
-    if job["state"] != "done":
+                                             "section": args.section or "", "instruction": args.instruction or "",
+                                             "critique": args.critique}, _actor(), wait=True)
+    if job["state"] not in ("done", "waiting"):
         print(f"error: {job['error']}", file=sys.stderr)
         return 1
     result = job["result"]
@@ -575,6 +575,10 @@ def cmd_agent(args) -> int:
         print(f"  kept in {result['path']}")
     if result.get("version"):
         print(f"  candidate version {result['version']} ({result['applied']} edit(s))")
+    for seen in result.get("reviews") or []:
+        print(f"  reviewer: {seen['verdict']} — {seen['overall']}")
+        for problem in seen["problems"]:
+            print(f"    {problem['what']} ({problem['why']})\n        → {problem['fix']}")
     return 0
 
 
@@ -693,6 +697,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--lang")
     p.add_argument("--instruction", "-m")
     p.add_argument("--brief", help="create: what the new agent should do, and for what")
+    p.add_argument("--critique", action="store_true", help="run: have a reviewer look at what the agent answered")
     p.set_defaults(func=cmd_agent)
 
     p = sub.add_parser("theme", help="the book's design: list the themes, or take one for every edition it covers")

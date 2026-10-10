@@ -112,6 +112,10 @@ control room with the assistant, and it can be translated section by section.
   book and hands back a report or edits; a meta-agent that designs new ones
   and tries each before cataloguing it.
 
+- One flow on LangGraph (ADR 0020): draft, check, land, hold. The designer
+  and every manifest agent run on it; after work lands the author can always
+  have it critiqued and redone; a failed check never lands.
+
 ## Next action
 
 On *A Era dos Agentes* itself, the author's acts: `kdp language add … en`,

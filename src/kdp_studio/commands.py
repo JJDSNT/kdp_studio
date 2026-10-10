@@ -190,6 +190,10 @@ def _add_report(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
     path = book.root / "reports" / agent / f"{stamp}-{subject}.md"
     with book_lock(book.root):
         path.parent.mkdir(parents=True, exist_ok=True)
+        again = 2
+        while path.exists():  # a second answer in the same second is another report, never the same file
+            path = path.with_name(f"{stamp}-{subject}-{again}.md")
+            again += 1
         path.write_text(text + "\n", encoding="utf-8")
         commit(book.root, [path], f"Report by {agent} on {subject}", actor)
     return {"path": str(path.relative_to(book.root)), "words": len(text.split())}

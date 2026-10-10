@@ -1,6 +1,6 @@
 # ADR 0002: Gates and workflow state are records in the book; LangGraph runs the agents
 
-Status: accepted (2026-10-04).
+Status: accepted (2026-10-04). Point 2 is carried out by ADR 0020 (2026-10-10): one graph for an agent's work.
 
 ## Context
 

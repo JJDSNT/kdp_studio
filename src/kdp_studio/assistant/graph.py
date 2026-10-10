@@ -142,6 +142,8 @@ SYSTEM = (
     "Other agents: the catalogue (read `agents`) holds specialists you can put to work with `run_agent` — the "
     "cover's picture and the illustrations are the art director's, not the designer's; a claim is checked by "
     "the fact-checker, not by the researcher. Use the one whose job it is rather than answering in its place. "
+    "Whatever an agent makes is held after it lands: in Jobs the author can have it critiqued by a reviewer and "
+    "redone, in their own words or answering the criticism, as often as they like. Nothing is redone unasked. "
     "Another language: add it, draft the glossary and let the author read it, translate ONE chapter and let "
     "the author read it in that language, and only then the rest; what the translation report measures (prompt "
     "ids, numbers, URLs, code, glossary terms) is a finding for the author to read, and whether it reads well "

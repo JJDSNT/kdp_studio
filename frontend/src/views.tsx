@@ -665,6 +665,7 @@ export function ContinuityView({ language }: { language: string }) {
 // ---------------------------------------------------------------- jobs
 
 interface Job {
+  waiting?: { title: string; can_review: boolean; reviewed: boolean; verdict: string; message: string } | null;
   id: string; kind: string; state: string; created_at: string; payload: Record<string, string>;
   progress: { at: string; message: string }[]; result: Record<string, unknown> | null; error: string;
   requested_by: { id: string; kind: string };
@@ -673,6 +674,23 @@ interface Job {
 export function JobsView({ language }: { language: string }) {
   const { data, error, reload } = useQuery(() => get<Job[]>("/api/jobs"), []);
   const running = (data || []).some((j) => j.state === "running" || j.state === "queued");
+  const [words, setWords] = useState<Record<string, string>>({});
+  const [problem, setProblem] = useState("");
+
+  async function answer(id: string, action: string) {
+    setProblem("");
+    try {
+      const response = await fetch("/api/jobs/answer", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action, instruction: words[id] || "" }),
+      });
+      if (!response.ok) throw new Error((await response.json())?.error?.message || response.statusText);
+      setWords({ ...words, [id]: "" });
+    } catch (e) {
+      setProblem((e as Error).message);
+    }
+    reload();
+  }
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(reload, 2000);
@@ -683,14 +701,30 @@ export function JobsView({ language }: { language: string }) {
   return (
     <div className="page">
       <h1>Jobs</h1>
+      <Problem text={problem} />
       <p className="muted">Agent work that takes longer than a chat turn. A job writes into the book only when it
         finishes, and only through commands: a candidate version, never the text itself.</p>
       {data.map((job) => (
-        <div key={job.id} className={`gate ${job.state === "done" ? "approved" : job.state === "running" ? "waiting" : ""}`}>
+        <div key={job.id} className={`gate ${job.state === "done" ? "approved" : job.state === "running" || job.state === "waiting" ? "waiting" : ""}`}>
           <p><strong>{job.kind}</strong> {job.payload.section} <span className={`state ${job.state}`}>{job.state}</span>
             <span className="muted"> — {job.requested_by.id} ({job.requested_by.kind}), {when(job.created_at)}</span></p>
           {job.progress.length > 0 && <p className="muted">{job.progress[job.progress.length - 1].message}</p>}
           {job.error && <p className="problem">{job.error}</p>}
+          {job.state === "waiting" && job.waiting && (
+            <div className="held">
+              <p>{job.waiting.message}</p>
+              <div className="decide">
+                <input placeholder={job.waiting.reviewed ? "What to change (empty: answer the criticism)" : "What to change"}
+                  value={words[job.id] || ""} onChange={(e) => setWords({ ...words, [job.id]: e.target.value })} />
+                {job.waiting.can_review && (
+                  <button className="secondary" onClick={() => answer(job.id, "critique")}>
+                    {job.waiting.reviewed ? "Critique again" : "Critique"}</button>)}
+                <button className="secondary" disabled={!job.waiting.reviewed && !(words[job.id] || "").trim()}
+                  onClick={() => answer(job.id, "redo")}>Redo</button>
+                <button onClick={() => answer(job.id, "done")}>Close</button>
+              </div>
+            </div>
+          )}
           {job.result && (
             <p>{String(job.result.summary || "")}{" "}
               {job.result.version ? <a href={href({ view: "version", language: job.payload.language || language,

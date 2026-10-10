@@ -33,6 +33,7 @@ from ..errors import KdpStudioError, ValidationError
 from ..jobs import Progress, kind
 from ..model import Model, model_from_env
 from ..state import Actor, now
+from .flow import Flow, hold_for_job
 
 AGENT = Actor("designer", "agent")
 _NAME = re.compile(r"[a-z][a-z0-9-]{1,30}")
@@ -259,12 +260,13 @@ def _record(name: str) -> Path:
 def design_theme(book: Book, name: str, brief: str, *, based_on: str = "nocturne", reference: str = "",
                  language: str = "", model: Model | None = None, attempts: int = 3, critic: Model | None = None,
                  rounds: int = 0, look: bool = False, revising: dict[str, Any] | None = None,
-                 instruction: str = "", progress=lambda message: None) -> dict[str, Any]:
+                 instruction: str = "", interactive: bool = False,
+                 progress=lambda message: None) -> dict[str, Any]:
     """Draw a theme (or, with `revising`, draw one again from its last answer and an instruction).
 
-    With `look`, a critic looks at the built pages once and its criticism is kept beside the theme: the
-    work then stops, and drawing again is the author's call. `rounds` lets the designer answer the critic
-    by itself that many times -- never the default, because a person has not read the criticism yet.
+    The work runs on the flow every agent uses (agents/flow.py): the drawing is checked by building the
+    specimen, catalogued, and then held for the author, who may have it critiqued or redone, as often
+    as they like. `interactive` is that hold; without it `look` and `rounds` script the answers.
     """
 
     if not _NAME.fullmatch(name):
@@ -291,96 +293,120 @@ def design_theme(book: Book, name: str, brief: str, *, based_on: str = "nocturne
               f"Its `fonts` block:\n{blocks['fonts']}\nIts `parts` block (the three \\kdp… macros at its end are "
               f"added by the tool; leave them out):\n{blocks['parts']}\nIts `chapter_style` block:\n"
               f"{blocks['chapter_style']}\nIts `section_head`:\n{blocks['section_head']}")
-    import json
+    work = ThemeWork(book, name, brief, based_on=based_on, reference=reference, language=language, prompt=prompt,
+                     model=model or model_from_env(), critic=critic, attempts=attempts, revising=revising is not None)
+    # With nobody to ask: `look` has the critic look once; `rounds` lets the designer answer it by itself.
+    script = (["critique", "redo"] * rounds + ["critique"]) if rounds else (["critique"] if look else [])
+    flow = Flow(work, interactive=interactive, script=script, progress=progress)
+    hold_for_job(progress, flow)
+    return flow.start(request=instruction.strip(), standing=revising)
 
-    from . import critic as critics
 
-    chosen = model or model_from_env()
-    destination = catalog.user_root()
-    kept = destination.with_name("templates.keep") / name
-    answer: dict[str, Any] = dict(revising or {})
-    history: list[dict[str, Any]] = []
-    if revising is not None and _record(name).is_file():
-        history = json.loads(_record(name).read_text("utf-8")).get("history", [])
-    request = instruction.strip()
-    verdicts: list[dict[str, Any]] = []
-    render: dict[str, Any] = {}
-    provenance: dict[str, Any] = {}
-    attempt = 0
-    for round_ in range(rounds + 1):
-        problem = ""
-        previous = answer
-        # What stands is set aside: a revision that does not build must not cost the theme it revises.
-        if kept.exists():
-            shutil.rmtree(kept)
+class ThemeWork:
+    """Drawing a theme, as the flow drives it: the model answers with blocks, the specimen is built with
+    them (the check), the theme is catalogued, and the critic of themes is its reviewer."""
+
+    can_review = True
+
+    def __init__(self, book: Book, name: str, brief: str, *, based_on: str, reference: str, language: str,
+                 prompt: str, model: Model, critic: Model | None, attempts: int, revising: bool) -> None:
+        self.book, self.name, self.brief, self.based_on = book, name, brief, based_on
+        self.reference, self.language, self.prompt = reference, language, prompt
+        self.model, self.critic, self.attempts = model, critic, attempts
+        self.title = f"Theme {name}"
+        self.existed = revising
+        self.render: dict[str, Any] = {}
+        self.provenance: dict[str, Any] = {}
+
+    @property
+    def _kept(self) -> Path:
+        return catalog.user_root().with_name("templates.keep") / self.name
+
+    def draft(self, request: str, standing: dict[str, Any] | None, error: str) -> dict[str, Any]:
+        import json
+
+        ask = self.prompt
+        if standing:
+            ask += ("\n\nYou already drew this theme. Your answer was:\n"
+                    + json.dumps({k: v for k, v in standing.items() if k != "notes"}, ensure_ascii=False)
+                    + "\n\nRevise it — answer again in full, changing what this asks and keeping the rest:\n"
+                    + request)
+        if error:
+            ask += f"\n\nYour last answer did not build. Fix it and answer again in full.\nThe error:\n{error}"
+        answer = self.model.ask(SYSTEM, ask, SCHEMA, web=bool(self.reference) and not standing)
+        if standing and standing.get("references") and not answer.get("references"):
+            answer["references"] = standing["references"]
+        return answer
+
+    def check(self, draft: dict[str, Any]) -> list[str]:
+        """`specimen_builds`: the theme is assembled and the specimen typeset with it. What stood before is
+        set aside first, and put back if this drawing does not build."""
+
+        destination = catalog.user_root()
+        if self._kept.exists():
+            shutil.rmtree(self._kept)
         for kind_ in gallery.KINDS:
-            if (destination / kind_ / name).is_dir():
-                shutil.copytree(destination / kind_ / name, kept / kind_)
-        for attempt in range(1, attempts + 1):
-            progress(("Revising" if previous else "Drawing") + f" {name}"
-                     + (f" (attempt {attempt}: {problem[:80]})" if problem else ""))
-            ask = prompt
-            if previous:
-                ask += ("\n\nYou already drew this theme. Your answer was:\n"
-                        + json.dumps({k: v for k, v in previous.items() if k != "notes"}, ensure_ascii=False)
-                        + f"\n\nRevise it — answer again in full, changing what this asks and keeping the rest:\n"
-                          f"{request}")
-            if problem:
-                ask += f"\n\nYour last answer did not build. Fix it and answer again in full.\nThe error:\n{problem}"
-            answer = chosen.ask(SYSTEM, ask, SCHEMA, web=bool(reference) and not previous)
-            try:
-                provenance = assemble(name, based_on, answer, destination, brief=brief)
-                if previous.get("references") and not answer.get("references"):
-                    answer["references"] = previous["references"]
-                progress("Building the specimen with it")
-                render = gallery.build(name, language, book.root)
-                problem = ""
-                break
-            except KdpStudioError as error:
-                problem = error.message + ("\n" + str(error.details.get("log_tail", "")) if error.details else "")
-                for kind_ in gallery.KINDS:
-                    shutil.rmtree(destination / kind_ / name, ignore_errors=True)
-        if problem:
-            for kind_ in gallery.KINDS:  # back to what stood before this round, if anything did
-                if (kept / kind_).is_dir():
-                    shutil.copytree(kept / kind_, destination / kind_ / name)
-            shutil.rmtree(kept, ignore_errors=True)
-            if not previous:
-                raise ValidationError(f"The theme {name!r} did not build after {attempts} attempt(s), and was not "
-                                      f"catalogued: {problem[:600]}")
-            raise ValidationError(f"The revision of {name!r} did not build after {attempts} attempt(s); the theme "
-                                  f"stays as it was: {problem[:600]}")
-        shutil.rmtree(kept, ignore_errors=True)
-        history.append({"at": now(), "instruction": request, "answer": answer})
-        _record(name).write_text(json.dumps({"name": name, "brief": brief, "based_on": based_on,
-                                             "reference": reference, "history": history},
-                                            ensure_ascii=False, indent=2), encoding="utf-8")
-        if round_ == rounds:
-            break
-        seen = critics.critique(book, name, language=language, brief=brief, model=critic, progress=progress)
-        verdicts.append(seen)
-        if seen["verdict"] == "accept":
-            break
-        request = critics.as_instruction(seen)
-    if rounds and (not verdicts or verdicts[-1]["verdict"] != "accept") and len(verdicts) == rounds:
-        # The last drawing answered a criticism: it is looked at too, so what is shown is about what stands.
-        verdicts.append(critics.critique(book, name, language=language, brief=brief, model=critic,
-                                         progress=progress))
-    if look and not rounds:
-        verdicts.append(critics.critique(book, name, language=language, brief=brief, model=critic,
-                                         progress=progress))
-    progress(f"{name} is in your catalogue and in the gallery")
-    return {"theme": name, "title": answer["title"], "description": answer["description"], "based_on": based_on,
-            "references": provenance.get("inspired_by", []), "notes": answer.get("notes", ""),
-            "overfull": render.get("overfull", 0), "underfull": render.get("underfull", 0),
-            "path": str(destination), "attempts": attempt, "drawings": len(history),
-            "critiques": [{k: v[k] for k in ("verdict", "defects", "overall")} for v in verdicts],
-            "summary": f"Theme {answer['title']} ({name}) built over the specimen and joined the gallery. "
-                       "Look at it before taking it."}
+            if (destination / kind_ / self.name).is_dir():
+                shutil.copytree(destination / kind_ / self.name, self._kept / kind_)
+        try:
+            self.provenance = assemble(self.name, self.based_on, draft, destination, brief=self.brief)
+            if self._kept.joinpath("print", DESIGN).is_file():  # the designer's memory survives a redrawing
+                shutil.copyfile(self._kept / "print" / DESIGN, _record(self.name))
+            self.render = gallery.build(self.name, self.language, self.book.root)
+            shutil.rmtree(self._kept, ignore_errors=True)
+            return []
+        except KdpStudioError as error:
+            for kind_ in gallery.KINDS:
+                shutil.rmtree(destination / kind_ / self.name, ignore_errors=True)
+                if (self._kept / kind_).is_dir():
+                    shutil.copytree(self._kept / kind_, destination / kind_ / self.name)
+            shutil.rmtree(self._kept, ignore_errors=True)
+            return [error.message + ("\n" + str(error.details.get("log_tail", "")) if error.details else "")]
+
+    def failure(self, problems: list[str], standing: dict[str, Any] | None) -> KdpStudioError:
+        why = "\n".join(problems)[:600]
+        if standing or self.existed:
+            return ValidationError(f"The revision of {self.name!r} did not build after {self.attempts} attempt(s); "
+                                   f"the theme stays as it was: {why}")
+        return ValidationError(f"The theme {self.name!r} did not build after {self.attempts} attempt(s), and was "
+                               f"not catalogued: {why}")
+
+    def land(self, draft: dict[str, Any]) -> dict[str, Any]:
+        import json
+
+        path = _record(self.name)
+        history = json.loads(path.read_text("utf-8")).get("history", []) if path.is_file() else []
+        history.append({"at": now(), "answer": draft})
+        path.write_text(json.dumps({"name": self.name, "brief": self.brief, "based_on": self.based_on,
+                                    "reference": self.reference, "history": history}, ensure_ascii=False, indent=2),
+                        encoding="utf-8")
+        self.existed = True
+        return {"theme": self.name, "drawings": len(history)}
+
+    def review(self, outcome: dict[str, Any]) -> dict[str, Any]:
+        from . import critic as critics
+
+        seen = critics.critique(self.book, self.name, language=self.language, brief=self.brief, model=self.critic)
+        return {"verdict": seen["verdict"], "defects": seen["defects"], "overall": seen["overall"],
+                "instruction": critics.as_instruction(seen),
+                "summary": f"The critic says {seen['verdict']} ({seen['defects']} defect(s) of the designer's): "
+                           + str(seen["overall"])[:300]}
+
+    def result(self, state: dict[str, Any]) -> dict[str, Any]:
+        answer = state.get("standing") or {}
+        return {"theme": self.name, "title": answer.get("title", self.name),
+                "description": answer.get("description", ""), "based_on": self.based_on,
+                "references": self.provenance.get("inspired_by", []), "notes": answer.get("notes", ""),
+                "overfull": self.render.get("overfull", 0), "underfull": self.render.get("underfull", 0),
+                "path": str(catalog.user_root()), "drawings": state.get("drawings", 0),
+                "critiques": [{k: v[k] for k in ("verdict", "defects", "overall")}
+                              for v in state.get("reviews") or []],
+                "summary": f"Theme {answer.get('title', self.name)} ({self.name}) built over the specimen and is "
+                           "in the gallery. Look at it before taking it."}
 
 
 def revise_theme(book: Book, name: str, instruction: str = "", *, language: str = "", model: Model | None = None,
-                 critic: Model | None = None, rounds: int = 0, look: bool = False,
+                 critic: Model | None = None, rounds: int = 0, look: bool = False, interactive: bool = False,
                  progress=lambda message: None) -> dict[str, Any]:
     """Draw one of the person's themes again: as they ask, or — with no instruction — as its last criticism asks."""
 
@@ -399,7 +425,8 @@ def revise_theme(book: Book, name: str, instruction: str = "", *, language: str 
         instruction = critics.as_instruction(last)
     return design_theme(book, name, record["brief"], based_on=record["based_on"], reference=record.get("reference", ""),
                         language=language, model=model, critic=critic, rounds=rounds, look=look,
-                        revising=record["history"][-1]["answer"], instruction=instruction, progress=progress)
+                        interactive=interactive, revising=record["history"][-1]["answer"],
+                        instruction=instruction, progress=progress)
 
 
 def remove_theme(name: str) -> dict[str, Any]:
@@ -419,8 +446,8 @@ def remove_theme(name: str) -> dict[str, Any]:
 @kind("revise_theme", "Designer: draw one of your themes again, as you ask or as its last criticism asks")
 def revise_theme_job(book: Book, payload: dict[str, Any], actor: Actor, progress: Progress) -> dict[str, Any]:
     return revise_theme(book, payload["theme"], payload.get("instruction", ""), language=payload.get("language", ""),
-                        rounds=int(payload.get("rounds", 0)), look=bool(payload.get("look", True)),
-                        progress=progress)
+                        rounds=int(payload.get("rounds", 0)), look=bool(payload.get("look", False)),
+                        interactive=True, progress=progress)
 
 
 @kind("design_theme", "Designer: a new theme from a brief and references, built over the specimen and catalogued")
@@ -428,4 +455,4 @@ def design_theme_job(book: Book, payload: dict[str, Any], actor: Actor, progress
     return design_theme(book, payload["name"], payload.get("brief", ""), based_on=payload.get("based_on") or "nocturne",
                         reference=payload.get("reference", ""), language=payload.get("language", ""),
                         rounds=int(payload.get("rounds", 0)), look=bool(payload.get("look", True)),
-                        progress=progress)
+                        interactive=True, progress=progress)

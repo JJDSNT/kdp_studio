@@ -167,3 +167,5 @@ header nav .apart { width: 1px; height: 1.4em; background: #0002; }
 .critique { margin: .8em 0; padding: .6em .9em; background: var(--soft); border-radius: 4px; }
 .critique summary { cursor: pointer; }
 .critique p { margin: .6em 0; }
+.held { margin-top: .6em; padding: .6em .8em; background: var(--soft); border-radius: 4px; }
+.held p { margin: 0 0 .5em; }

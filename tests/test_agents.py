@@ -2,11 +2,13 @@
 
 import pytest
 
-from kdp_studio.agents import manifest as manifests
-from kdp_studio.agents.meta import create_agent, remove_agent
-from kdp_studio.book import load_book
-from kdp_studio.errors import ValidationError
-from kdp_studio.versions import version_report
+pytest.importorskip("langgraph")
+
+from kdp_studio.agents import manifest as manifests  # noqa: E402
+from kdp_studio.agents.meta import create_agent, remove_agent  # noqa: E402
+from kdp_studio.book import load_book  # noqa: E402
+from kdp_studio.errors import ValidationError  # noqa: E402
+from kdp_studio.versions import version_report  # noqa: E402
 
 
 class Answers:
@@ -117,3 +119,49 @@ def test_an_agent_that_asks_for_more_than_a_manifest_allows_is_never_catalogued(
         create_agent(load_book(sample), "rewriter", "Rewrite the whole book.", model=model)
     assert len(model.asked) == 2 and "was refused" in model.asked[1]["prompt"]
     assert "rewriter" not in manifests.manifests(sample)
+
+
+def test_an_answer_that_fails_its_check_goes_back_to_the_agent_and_never_lands(sample):
+    book = load_book(sample)
+    lost = {"edits": [{"find": "a passage that is not there", "replace": "x", "practice": "seam", "why": "w"}],
+            "skipped": [], "summary": "One."}
+    moved = {"edits": [{"find": "12 March 1998", "replace": "13 March 1998", "practice": "seam", "why": "w"}],
+             "skipped": [], "summary": "One."}
+    good = {"edits": [{"find": "the workshop opened", "replace": "the workshop first opened", "practice": "seam",
+                       "why": "w"}], "skipped": [], "summary": "One."}
+    model = Answers(lost, good)
+    result = manifests.run(book, "continuity-reviser", section="01-first-light", model=model)
+    assert result["applied"] == 1 and "None of your edits could be applied" in model.asked[1]["prompt"]
+    # Under a wording scope a changed date is refused before any version exists; with no answer left, nothing lands.
+    model = Answers(moved, moved)
+    with pytest.raises(ValidationError, match="change facts"):
+        manifests.run(book, "continuity-reviser", section="01-first-light", model=model)
+    from kdp_studio.versions import list_versions
+
+    assert len(list_versions(book, "en", "01-first-light")) == 1
+
+
+def test_the_author_can_always_have_work_critiqued_and_redone(sample, tmp_path, monkeypatch):
+    from kdp_studio import jobs
+    from kdp_studio.state import Actor
+
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    book = load_book(sample)
+    review = {"overall": "Generic.", "verdict": "revise",
+              "problems": [{"what": "no passage quoted", "why": "nobody can act on it", "fix": "quote each one"}]}
+    model = Answers(REPORT, review, {**REPORT, "summary": "compatible"})
+    monkeypatch.setattr("kdp_studio.agents.manifest.model_from_env", lambda: model)
+    job = jobs.start(book, "run_agent", {"agent": "intention-guardian", "section": "01-first-light"},
+                     Actor("author"), wait=True)
+    # It landed, and the flow is held: nothing more happens until the author says so.
+    assert job["state"] == "waiting" and job["waiting"]["reviewed"] is False and len(model.asked) == 1
+    job = jobs.answer(book, job["id"], "critique", wait=True)
+    assert job["state"] == "waiting" and job["waiting"]["verdict"] == "revise"
+    assert "its critic, not its colleague" in model.asked[1]["system"]
+    job = jobs.answer(book, job["id"], "redo", wait=True)
+    assert "A reviewer read your answer" in model.asked[2]["prompt"] and "quote each one" in model.asked[2]["prompt"]
+    assert job["result"]["summary"] == "compatible" and job["result"]["answers"] == 2
+    job = jobs.answer(book, job["id"], "done", wait=True)
+    assert job["state"] == "done" and len(list((sample / "reports" / "intention-guardian").glob("*.md"))) == 2
+    with pytest.raises(ValidationError, match="not waiting"):
+        jobs.answer(book, job["id"], "redo", wait=True)

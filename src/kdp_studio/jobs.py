@@ -25,8 +25,11 @@ from .book import Book
 from .errors import NotFoundError, ValidationError
 from .state import Actor, now
 
-STATES = ("queued", "running", "done", "failed", "interrupted")
+#: waiting: the work landed and its flow is held for the author, who may critique it, redo it or close.
+STATES = ("queued", "running", "waiting", "done", "failed", "interrupted")
 _lock = threading.Lock()
+#: job id -> the flow held for it (agents/flow.py). In memory: a runtime that stops forgets it.
+HELD: dict[str, Any] = {}
 
 
 def store_path(book: Book) -> Path:
@@ -86,6 +89,9 @@ def reconcile(book: Book) -> None:
             if job["state"] in ("queued", "running"):
                 job.update(state="interrupted", updated_at=now(),
                            note="The runtime stopped before the job finished; nothing was written.")
+            elif job["state"] == "waiting" and job["id"] not in HELD:
+                # What it made is in the book; only the chance to answer it in place is gone.
+                job.update(state="done", updated_at=now(), waiting=None)
         _write(book, jobs)
 
 
@@ -109,6 +115,41 @@ def kind(name: str, description: str):
     return register
 
 
+def _run(book: Book, job_id: str, work: Callable[[], dict[str, Any]]) -> None:
+    _update(book, job_id, state="running")
+    try:
+        result = work()
+        held = isinstance(result, dict) and result.get("waiting") and job_id in HELD
+        if not held:
+            HELD.pop(job_id, None)
+        _update(book, job_id, state="waiting" if held else "done", result=result,
+                waiting=result.get("waiting") if held else None)
+    except Exception as error:  # noqa: BLE001 - the job records why it failed
+        HELD.pop(job_id, None)
+        message = getattr(error, "message", str(error)) or error.__class__.__name__
+        _update(book, job_id, state="failed", error=message, trace=traceback.format_exc(limit=4)[-2000:])
+
+
+def answer(book: Book, job_id: str, action: str, instruction: str = "", *, wait: bool = False) -> dict[str, Any]:
+    """The author's answer to work that is waiting: critique it, redo it, or close it."""
+
+    job = get_job(book, job_id)
+    flow = HELD.get(job_id)
+    if job["state"] != "waiting" or flow is None:
+        raise ValidationError("This job is not waiting for an answer (a runtime that restarted forgets the wait)")
+    progress = Progress(book, job_id)
+    progress(f"You answered: {action}" + (f" — {instruction}" if instruction else ""))
+
+    def run() -> None:
+        _run(book, job_id, lambda: flow.answer(action, instruction))
+
+    if wait:
+        run()
+    else:
+        threading.Thread(target=run, name=job_id, daemon=True).start()
+    return get_job(book, job_id)
+
+
 def start(book: Book, kind_name: str, payload: dict[str, Any], actor: Actor, *, wait: bool = False) -> dict[str, Any]:
     from . import agents, art  # noqa: F401 - register their job kinds
 
@@ -123,14 +164,7 @@ def start(book: Book, kind_name: str, payload: dict[str, Any], actor: Actor, *, 
         _write(book, jobs)
 
     def run() -> None:
-        _update(book, job["id"], state="running")
-        try:
-            result = KINDS[kind_name][1](book, payload, actor, Progress(book, job["id"]))
-            _update(book, job["id"], state="done", result=result)
-        except Exception as error:  # noqa: BLE001 - the job records why it failed
-            message = getattr(error, "message", str(error)) or error.__class__.__name__
-            _update(book, job["id"], state="failed", error=message,
-                    trace=traceback.format_exc(limit=4)[-2000:])
+        _run(book, job["id"], lambda: KINDS[kind_name][1](book, payload, actor, Progress(book, job["id"])))
 
     if wait:
         run()
