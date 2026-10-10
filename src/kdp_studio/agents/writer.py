@@ -15,12 +15,13 @@ from typing import Any
 
 from ..book import Book, split_frontmatter
 from ..errors import NotFoundError
-from ..jobs import Progress, kind
+from ..jobs import flow_kind
 from ..model import Model, model_from_env
 from ..state import Actor
 from ..style import catalogue, check_sections
 from ..versions import propose_version, read_section, version_report
-from .edits import book_context
+from .edits import book_context, version_text
+from .flow import SimpleWork, again, review_work, run_work
 
 AGENT = Actor("writer", "agent")
 
@@ -62,8 +63,24 @@ def _plan(book: Book, current: str) -> str:
     return "\n".join(lines)
 
 
-def write_section(book: Book, language: str, section: str, instruction: str = "", *,
-                  model: Model | None = None, progress=lambda message: None) -> dict[str, Any]:
+def manuscript_format(body: str) -> list[str]:
+    """`manuscript_format`: what the book format refuses in a section's body."""
+
+    from ..markdown import is_comment, parse
+
+    problems = []
+    if not body.strip():
+        return ["The chapter has no text."]
+    for node in parse(body).walk():
+        if node.type in ("html_block", "html_inline") and not is_comment(node):
+            problems.append(f"Raw HTML is not part of the format: {node.content.strip()[:60]!r}")
+        if node.type == "heading" and node.tag == "h1":
+            problems.append("A `#` heading: the chapter's title is in the frontmatter, sections start at `##`.")
+    return problems[:6]
+
+
+def _work(book: Book, language: str, section: str, instruction: str = "", *, model: Model | None = None,
+          reviewer: Model | None = None) -> SimpleWork:
     sections = book.sections(language)
     index = next((i for i, s in enumerate(sections) if s.id == section), None)
     if index is None:
@@ -87,26 +104,42 @@ def write_section(book: Book, language: str, section: str, instruction: str = ""
               f"Writing vices to avoid:\n{vices}\n\n{FORMAT}\n\n"
               + (f"The current text (rewrite it):\n{body}\n\n" if body.strip() else "")
               + f"The author's instruction:\n{instruction.strip() or '(none: write the chapter)'}")
-    progress("Writing the chapter")
-    answer = (model or model_from_env()).ask(SYSTEM, prompt, SCHEMA)
-    text = header + "\n" + answer["body"].strip() + "\n"
-    version = propose_version(book, language, section, text, actor=AGENT, scope="content",
-                              rationale=("Draft by the writer" if not body.strip() else "Rewrite by the writer")
-                              + (f": {instruction.strip()}" if instruction.strip() else "."),
-                              task=answer.get("notes", ""))
-    from dataclasses import replace
+    chosen = model or model_from_env()
 
-    candidate = replace(target, body=split_frontmatter(text)[1], path=target.path.with_suffix(".candidate"))
-    findings = check_sections(book, language, [candidate], engines=False).findings
-    report = version_report(book, version["id"])
-    progress(f"Recorded a candidate version ({len(answer['body'].split())} words)")
-    return {"version": version["id"], "words": len(answer["body"].split()), "notes": answer.get("notes", ""),
-            "to_check": answer.get("to_check") or [], "style_findings": len(findings),
-            "facts_added": len(report["fidelity"]["facts_added"]),
-            "summary": answer.get("notes", "")}
+    def ask(request: str, standing: dict[str, Any] | None, error: str) -> dict[str, Any]:
+        return chosen.ask(SYSTEM, again(prompt, request, standing, error), SCHEMA)
+
+    def land(answer: dict[str, Any]) -> dict[str, Any]:
+        from dataclasses import replace
+
+        text = header + "\n" + answer["body"].strip() + "\n"
+        version = propose_version(book, language, section, text, actor=AGENT, scope="content",
+                                  rationale=("Draft by the writer" if not body.strip() else "Rewrite by the writer")
+                                  + (f": {instruction.strip()}" if instruction.strip() else "."),
+                                  task=answer.get("notes", ""))
+        candidate = replace(target, body=split_frontmatter(text)[1], path=target.path.with_suffix(".candidate"))
+        findings = check_sections(book, language, [candidate], engines=False).findings
+        report = version_report(book, version["id"])
+        return {"version": version["id"], "section": section, "language": language,
+                "words": len(answer["body"].split()), "notes": answer.get("notes", ""),
+                "to_check": answer.get("to_check") or [], "style_findings": len(findings),
+                "facts_added": len(report["fidelity"]["facts_added"]), "summary": answer.get("notes", "")}
+
+    def review(outcome: dict[str, Any]) -> dict[str, Any]:
+        return review_work(reviewer or chosen, title="Writer",
+                           role="Writes one chapter so that it keeps its promise, in the book's voice.", shown=prompt,
+                           answered=version_text(book, language, section, outcome.get("version")))
+
+    return SimpleWork(f"Writer: {target.title}", ask=ask, land=land, review=review,
+                      checks=[("manuscript_format", lambda answer: manuscript_format(str(answer.get("body", ""))))])
 
 
-@kind("write_section", "Writer: write a section to its synopsis and promise, as a candidate version")
-def write_job(book: Book, payload: dict[str, Any], actor: Actor, progress: Progress) -> dict[str, Any]:
-    return write_section(book, payload.get("language") or book.source_language, payload["section"],
-                         payload.get("instruction", ""), progress=progress)
+def write_section(book: Book, language: str, section: str, instruction: str = "", *,
+                  model: Model | None = None, progress=lambda message: None) -> dict[str, Any]:
+    return run_work(_work(book, language, section, instruction, model=model), progress=progress)
+
+
+@flow_kind("write_section", "Writer: write a section to its synopsis and promise, as a candidate version")
+def write_flow(book: Book, payload: dict[str, Any], progress) -> tuple[Any, dict[str, Any], list]:
+    return _work(book, payload.get("language") or book.source_language, payload["section"],
+                 payload.get("instruction", "")), {}, []

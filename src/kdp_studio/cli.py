@@ -256,7 +256,7 @@ def cmd_revise(args) -> int:
     job = jobs.start(book, "revise_voice", {"language": args.lang or book.source_language,
                                             "section": args.section}, _actor(), wait=True)
     print(json.dumps(job["result"] or job["error"], ensure_ascii=False, indent=2))
-    return 0 if job["state"] == "done" else 1
+    return 0 if job["state"] in ("done", "waiting") else 1
 
 
 def cmd_move(args) -> int:
@@ -283,7 +283,7 @@ def cmd_language(args) -> int:
     else:
         job = jobs.start(book, "add_language", {"language": args.language, "reason": args.reason or ""}, _actor(),
                          wait=True)
-        if job["state"] != "done":
+        if job["state"] not in ("done", "waiting"):
             print(f"error: {job['error']}", file=sys.stderr)
             return 1
         result = job["result"]
@@ -311,7 +311,7 @@ def cmd_glossary(args) -> int:
             print("  never translated: " + ", ".join(found.keep))
         return 0
     job = jobs.start(book, "propose_glossary", {"language": args.language}, _actor(), wait=True)
-    if job["state"] != "done":
+    if job["state"] not in ("done", "waiting"):
         print(f"error: {job['error']}", file=sys.stderr)
         return 1
     result = job["result"]
@@ -332,7 +332,7 @@ def cmd_translate(args) -> int:
     if args.section:
         payload["section"] = args.section
     job = jobs.start(book, kind, payload, _actor(), wait=True)
-    if job["state"] != "done":
+    if job["state"] not in ("done", "waiting"):
         print(f"error: {job['error']}", file=sys.stderr)
         return 1
     result = job["result"]
@@ -434,8 +434,8 @@ def cmd_art(args) -> int:
             print("  nothing was sent: this is paid work — run again with --yes to send it")
             return 0
         job = jobs.start(book, "generate_art", {**payload, "seed": planned["seed"]}, _actor(), wait=True)
-        print(f"  {job['result']['summary']}" if job["state"] == "done" else f"error: {job['error']}")
-        return 0 if job["state"] == "done" else 1
+        print(f"  {job['result']['summary']}" if job["state"] in ("done", "waiting") else f"error: {job['error']}")
+        return 0 if job["state"] in ("done", "waiting") else 1
     for found in art.records(book):
         how = found.get("model") or ("recorded" if found["recorded"] else "not recorded")
         print(f"  {found['id']:24} {found.get('purpose', ''):13} {found['width']} × {found['height']} px  "

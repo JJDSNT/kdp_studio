@@ -156,3 +156,49 @@ def record(book: Book, language: str, section: str, answer: dict[str, Any], *, a
     original = next(s for s in book.sections(language) if s.id == section)
     candidate = replace(original, body=split_frontmatter(revised)[1], path=original.path.with_suffix(".candidate"))
     return {**outcome, "version": version["id"], "violations": audit["violations"], "candidate": candidate}
+
+
+# ----------------------------------------------------- checks, by name
+
+def check_edits_apply(book: Book, language: str, section: str, draft: dict[str, Any]) -> list[str]:
+    """`edits_apply`: at least one edit lands. Deciding to change nothing is an answer."""
+
+    edits = draft.get("edits") or []
+    if not edits:
+        return []
+    _, applied, refused = apply_edits(read_section(book, language, section)["text"], edits)
+    if applied:
+        return []
+    return ["None of your edits could be applied: " + "; ".join(
+        f"“{str(r.get('find', ''))[:60]}” — {r['reason']}" for r in refused[:6])
+        + ". `find` must be copied exactly from the section and occur once."]
+
+
+def check_facts_unchanged(book: Book, language: str, section: str, draft: dict[str, Any]) -> list[str]:
+    """`facts_unchanged`: under a wording scope no number, date, name, URL or code moves."""
+
+    from ..fidelity import compare
+
+    current = read_section(book, language, section)["text"]
+    revised, applied, _ = apply_edits(current, draft.get("edits") or [])
+    if not applied:
+        return []
+    found = compare(current, revised)
+    moved = [f"removed {kind} “{value}”" for kind, value, _ in found.facts_removed] \
+        + [f"added {kind} “{value}”" for kind, value, _ in found.facts_added]
+    return ["Your edits change facts, which this scope forbids: " + "; ".join(moved[:10])] if moved else []
+
+
+def edit_checks(book: Book, language: str, section: str, scope: str) -> list[tuple[str, Any]]:
+    checks = [("edits_apply", lambda draft: check_edits_apply(book, language, section, draft))]
+    if scope == "wording":
+        checks.append(("facts_unchanged", lambda draft: check_facts_unchanged(book, language, section, draft)))
+    return checks
+
+
+def version_text(book: Book, language: str, section: str, version: str | None) -> str:
+    """A candidate version as a reviewer reads it."""
+
+    if not version:
+        return "(no version was recorded: the agent changed nothing)"
+    return (book.root / "versions" / language / section / f"{version}.md").read_text("utf-8")

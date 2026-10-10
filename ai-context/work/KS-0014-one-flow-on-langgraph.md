@@ -18,12 +18,22 @@ updated_at: 2026-10-10
   in a manifest, a critic of the work as reviewer.
 - `add_report` never reuses a file name.
 
+- Second pass: the researcher, architect, writer, reviser, voice reviser and
+  translator on the flow (`SimpleWork`), each with a named check; job kinds
+  declared with `flow_kind`; checkpoints on disk (`flows.sqlite`) and work
+  rebuilt from the job so a held flow survives a restart; the assistant's
+  `answer_job`; reviews listed in the Jobs view.
+
 # Validation
 
-95 tests pass; flake8 clean; the frontend builds. Real model: ADR 0020.
+97 tests pass; flake8 clean; the frontend builds. Real model: ADR 0020.
 
 # Remaining
 
-Move the researcher, architect, writer, revisers and translator onto the flow;
-let the assistant answer a held job from the chat; show a job's reviews in the
-Jobs view beyond the last summary.
+- `add_language`, `propose_glossary`, `translate_book`, `critique_theme`,
+  `generate_art` and `create_agent` are jobs without a hold: none is a single
+  answer one would redo in place.
+- The checks added here refuse what used to pass: a plan naming research
+  that does not exist, a chapter with raw HTML, a translation that drops a
+  callout. That is the point, and it changed three test fixtures.
+- A held job keeps its wait until closed: nothing prunes old ones.

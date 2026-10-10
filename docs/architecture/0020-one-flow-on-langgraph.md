@@ -32,24 +32,38 @@ leave the framework unused here.
 - **Nothing is redone unasked.** The work lands and the flow waits. A job in
   that state is `waiting`; the Jobs view shows the three choices. A caller
   with nobody to ask (the command line, a test) scripts the answers.
-- **What lands is in the book; the wait is not.** Checkpoints are in memory.
-  The interrupt is alone in its node, so resuming re-runs nothing that
-  writes. A runtime that stops forgets a held flow and reports the job done:
-  its reports, versions and themes are already records.
+- **What lands is in the book.** The interrupt is alone in its node, so
+  resuming re-runs nothing that writes; the wait itself is a checkpoint (see
+  below), disposable without losing a report, a version or a theme.
 - **A failed check never lands.** An agent whose edits do not apply, or move
   a fact under a wording scope, is told why and answers again; with no answer
   left the work fails and nothing is written.
 
-## Not yet on the flow
+## Every agent is on it
 
-The researcher, architect, writer, the two revisers and the translator are
-still plain functions run as jobs. Each has a check that would sit in the
-graph as it is (the translator's measurements, the reviser's fidelity audit)
-and would gain critique and redo by moving.
+The researcher (`sources_cited`), the architect (`plan_complete`), the writer
+(`manuscript_format`), the reviser and the voice reviser (`edits_apply`,
+`facts_unchanged`), the translator (`structure_kept`: what a translation may
+not lose, measured before it lands, three answers at most), the designer
+(`specimen_builds`) and every manifest agent. Each is four things given to
+the flow — how the model is asked, its named checks, how the answer lands, who
+reviews it — and none of them owns a loop. `translate_book` runs the
+translator's flow section by section, with nobody held.
+
+## The wait survives a restart
+
+A job's flow is checkpointed on disk beside the job store (`flows.sqlite`,
+LangGraph's SQLite checkpointer). A job kind on the flow is declared by a
+function that only *builds* the work from the payload, so a runtime that
+restarted builds it again and resumes the graph at its hold. What a result
+needs travels in the graph's state. The assistant can answer a held job from
+the chat (`answer_job`), after asking.
 
 ## Validation
 
 Scripted models: an answer that fails its check goes back and, failing again,
 never lands; a job waits, is critiqued, redone answering the criticism, and
-closed. Real model: the KDP packager on a copy of *A Era dos Agentes*, then
-its reviewer, on the graph, in 2m27s.
+closed; a job answered after the runtime that held it is gone. Real model, on
+a copy of *A Era dos Agentes*: the KDP packager and its reviewer in 2m27s;
+the translator on chapter 1 in 28 s, eighteen measurements passing before the
+version was recorded.

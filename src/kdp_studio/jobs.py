@@ -89,7 +89,7 @@ def reconcile(book: Book) -> None:
             if job["state"] in ("queued", "running"):
                 job.update(state="interrupted", updated_at=now(),
                            note="The runtime stopped before the job finished; nothing was written.")
-            elif job["state"] == "waiting" and job["id"] not in HELD:
+            elif job["state"] == "waiting" and job["id"] not in HELD and job["kind"] not in FLOW_KINDS:
                 # What it made is in the book; only the chance to answer it in place is gone.
                 job.update(state="done", updated_at=now(), waiting=None)
         _write(book, jobs)
@@ -115,6 +115,38 @@ def kind(name: str, description: str):
     return register
 
 
+#: kind -> how its work is built from a job's payload: (work, how the flow starts, the scripted answers).
+FLOW_KINDS: dict[str, Callable[[Book, dict[str, Any], Callable[[str], None]], tuple[Any, dict[str, Any], list]]] = {}
+
+
+def flow_kind(name: str, description: str):
+    """A job kind whose work runs on the flow (agents/flow.py): checked, landed, then held for the author.
+
+    The function builds the work from the payload and does nothing else, so a
+    runtime that restarted can build it again and resume the held graph.
+    """
+
+    def register(factory):
+        FLOW_KINDS[name] = factory
+
+        def run(book: Book, payload: dict[str, Any], actor: Actor, progress: Progress) -> dict[str, Any]:
+            work, start_with, script = factory(book, payload, progress)
+            flow = _flow(book, work, progress.job_id, progress, script)
+            HELD[progress.job_id] = flow
+            return flow.start(**start_with)
+
+        KINDS[name] = (description, run)
+        return factory
+    return register
+
+
+def _flow(book: Book, work: Any, job_id: str, progress: Callable[[str], None], script: list | None = None):
+    from .agents.flow import Flow, persistent
+
+    return Flow(work, interactive=True, script=script, progress=progress, thread=job_id,
+                checkpointer=persistent(store_path(book).with_name("flows.sqlite")))
+
+
 def _run(book: Book, job_id: str, work: Callable[[], dict[str, Any]]) -> None:
     _update(book, job_id, state="running")
     try:
@@ -133,11 +165,25 @@ def _run(book: Book, job_id: str, work: Callable[[], dict[str, Any]]) -> None:
 def answer(book: Book, job_id: str, action: str, instruction: str = "", *, wait: bool = False) -> dict[str, Any]:
     """The author's answer to work that is waiting: critique it, redo it, or close it."""
 
+    from . import agents, art  # noqa: F401 - register the job kinds
+
     job = get_job(book, job_id)
-    flow = HELD.get(job_id)
-    if job["state"] != "waiting" or flow is None:
-        raise ValidationError("This job is not waiting for an answer (a runtime that restarted forgets the wait)")
+    if job["state"] != "waiting":
+        raise ValidationError("This job is not waiting for an answer")
     progress = Progress(book, job_id)
+    flow = HELD.get(job_id)
+    if flow is None and job["kind"] in FLOW_KINDS:
+        # Another runtime held it: build the work again from the job itself and resume its checkpoint.
+        work, _, _ = FLOW_KINDS[job["kind"]](book, {**job["payload"], "_resume": True}, progress)
+        flow = _flow(book, work, job_id, progress)
+        if flow.held():
+            HELD[job_id] = flow
+        else:
+            flow = None
+    if flow is None:
+        _update(book, job_id, state="done", waiting=None)
+        raise ValidationError("The wait of this job was lost with the runtime that held it; what it made is "
+                              "in the book. Start it again to redo it.")
     progress(f"You answered: {action}" + (f" — {instruction}" if instruction else ""))
 
     def run() -> None:

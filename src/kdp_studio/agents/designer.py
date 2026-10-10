@@ -30,10 +30,10 @@ import yaml
 from .. import catalog, gallery
 from ..book import Book
 from ..errors import KdpStudioError, ValidationError
-from ..jobs import Progress, kind
+from ..jobs import flow_kind
 from ..model import Model, model_from_env
 from ..state import Actor, now
-from .flow import Flow, hold_for_job
+from .flow import run_work
 
 AGENT = Actor("designer", "agent")
 _NAME = re.compile(r"[a-z][a-z0-9-]{1,30}")
@@ -257,17 +257,10 @@ def _record(name: str) -> Path:
     return catalog.user_root() / "print" / name / DESIGN
 
 
-def design_theme(book: Book, name: str, brief: str, *, based_on: str = "nocturne", reference: str = "",
-                 language: str = "", model: Model | None = None, attempts: int = 3, critic: Model | None = None,
-                 rounds: int = 0, look: bool = False, revising: dict[str, Any] | None = None,
-                 instruction: str = "", interactive: bool = False,
-                 progress=lambda message: None) -> dict[str, Any]:
-    """Draw a theme (or, with `revising`, draw one again from its last answer and an instruction).
-
-    The work runs on the flow every agent uses (agents/flow.py): the drawing is checked by building the
-    specimen, catalogued, and then held for the author, who may have it critiqued or redone, as often
-    as they like. `interactive` is that hold; without it `look` and `rounds` script the answers.
-    """
+def _theme_work(book: Book, name: str, brief: str, *, based_on: str = "nocturne", reference: str = "",
+                language: str = "", model: Model | None = None, attempts: int = 3, critic: Model | None = None,
+                revising: dict[str, Any] | None = None) -> "ThemeWork":
+    """The work of drawing a theme, validated and ready for the flow."""
 
     if not _NAME.fullmatch(name):
         raise ValidationError(f"{name!r} is not a theme name (lowercase letters, digits and hyphens)")
@@ -293,13 +286,31 @@ def design_theme(book: Book, name: str, brief: str, *, based_on: str = "nocturne
               f"Its `fonts` block:\n{blocks['fonts']}\nIts `parts` block (the three \\kdp… macros at its end are "
               f"added by the tool; leave them out):\n{blocks['parts']}\nIts `chapter_style` block:\n"
               f"{blocks['chapter_style']}\nIts `section_head`:\n{blocks['section_head']}")
-    work = ThemeWork(book, name, brief, based_on=based_on, reference=reference, language=language, prompt=prompt,
+    return ThemeWork(book, name, brief, based_on=based_on, reference=reference, language=language, prompt=prompt,
                      model=model or model_from_env(), critic=critic, attempts=attempts, revising=revising is not None)
-    # With nobody to ask: `look` has the critic look once; `rounds` lets the designer answer it by itself.
-    script = (["critique", "redo"] * rounds + ["critique"]) if rounds else (["critique"] if look else [])
-    flow = Flow(work, interactive=interactive, script=script, progress=progress)
-    hold_for_job(progress, flow)
-    return flow.start(request=instruction.strip(), standing=revising)
+
+
+def _script(look: bool, rounds: int) -> list[str]:
+    """With nobody to ask: `look` has the critic look once; `rounds` lets the designer answer it by itself."""
+
+    return (["critique", "redo"] * rounds + ["critique"]) if rounds else (["critique"] if look else [])
+
+
+def design_theme(book: Book, name: str, brief: str, *, based_on: str = "nocturne", reference: str = "",
+                 language: str = "", model: Model | None = None, attempts: int = 3, critic: Model | None = None,
+                 rounds: int = 0, look: bool = False, revising: dict[str, Any] | None = None,
+                 instruction: str = "", progress=lambda message: None) -> dict[str, Any]:
+    """Draw a theme at once (or, with `revising`, draw one again from its last answer and an instruction).
+
+    The work runs on the flow every agent uses (agents/flow.py): the drawing is checked by building the
+    specimen, catalogued, and — as a job — held for the author to critique or redo. Here, with nobody to
+    ask, `look` and `rounds` script those answers.
+    """
+
+    work = _theme_work(book, name, brief, based_on=based_on, reference=reference, language=language, model=model,
+                       attempts=attempts, critic=critic, revising=revising)
+    return run_work(work, script=_script(look, rounds), progress=progress, request=instruction.strip(),
+                    standing=revising)
 
 
 class ThemeWork:
@@ -381,7 +392,13 @@ class ThemeWork:
                                     "reference": self.reference, "history": history}, ensure_ascii=False, indent=2),
                         encoding="utf-8")
         self.existed = True
-        return {"theme": self.name, "drawings": len(history)}
+        return {"theme": self.name, "title": draft.get("title", self.name),
+                "description": draft.get("description", ""), "based_on": self.based_on,
+                "references": self.provenance.get("inspired_by", []), "notes": draft.get("notes", ""),
+                "overfull": self.render.get("overfull", 0), "underfull": self.render.get("underfull", 0),
+                "path": str(catalog.user_root()), "drawings": len(history),
+                "summary": f"Theme {draft.get('title', self.name)} ({self.name}) built over the specimen and is "
+                           "in the gallery. Look at it before taking it."}
 
     def review(self, outcome: dict[str, Any]) -> dict[str, Any]:
         from . import critic as critics
@@ -393,22 +410,13 @@ class ThemeWork:
                            + str(seen["overall"])[:300]}
 
     def result(self, state: dict[str, Any]) -> dict[str, Any]:
-        answer = state.get("standing") or {}
-        return {"theme": self.name, "title": answer.get("title", self.name),
-                "description": answer.get("description", ""), "based_on": self.based_on,
-                "references": self.provenance.get("inspired_by", []), "notes": answer.get("notes", ""),
-                "overfull": self.render.get("overfull", 0), "underfull": self.render.get("underfull", 0),
-                "path": str(catalog.user_root()), "drawings": state.get("drawings", 0),
+        return {**(state.get("outcome") or {"theme": self.name}),
                 "critiques": [{k: v[k] for k in ("verdict", "defects", "overall")}
-                              for v in state.get("reviews") or []],
-                "summary": f"Theme {answer.get('title', self.name)} ({self.name}) built over the specimen and is "
-                           "in the gallery. Look at it before taking it."}
+                              for v in state.get("reviews") or []]}
 
 
-def revise_theme(book: Book, name: str, instruction: str = "", *, language: str = "", model: Model | None = None,
-                 critic: Model | None = None, rounds: int = 0, look: bool = False, interactive: bool = False,
-                 progress=lambda message: None) -> dict[str, Any]:
-    """Draw one of the person's themes again: as they ask, or — with no instruction — as its last criticism asks."""
+def _standing(name: str, instruction: str) -> tuple[dict[str, Any], str]:
+    """What the designer last answered for one of the person's themes, and what to change in it."""
 
     import json
 
@@ -423,10 +431,18 @@ def revise_theme(book: Book, name: str, instruction: str = "", *, language: str 
         if last is None:
             raise ValidationError("Say what to change, or have the critic look at the theme first")
         instruction = critics.as_instruction(last)
+    return record, instruction
+
+
+def revise_theme(book: Book, name: str, instruction: str = "", *, language: str = "", model: Model | None = None,
+                 critic: Model | None = None, rounds: int = 0, look: bool = False,
+                 progress=lambda message: None) -> dict[str, Any]:
+    """Draw one of the person's themes again: as they ask, or — with no instruction — as its last criticism asks."""
+
+    record, instruction = _standing(name, instruction)
     return design_theme(book, name, record["brief"], based_on=record["based_on"], reference=record.get("reference", ""),
                         language=language, model=model, critic=critic, rounds=rounds, look=look,
-                        interactive=interactive, revising=record["history"][-1]["answer"],
-                        instruction=instruction, progress=progress)
+                        revising=record["history"][-1]["answer"], instruction=instruction, progress=progress)
 
 
 def remove_theme(name: str) -> dict[str, Any]:
@@ -443,16 +459,25 @@ def remove_theme(name: str) -> dict[str, Any]:
     return {"theme": name, "removed": removed}
 
 
-@kind("revise_theme", "Designer: draw one of your themes again, as you ask or as its last criticism asks")
-def revise_theme_job(book: Book, payload: dict[str, Any], actor: Actor, progress: Progress) -> dict[str, Any]:
-    return revise_theme(book, payload["theme"], payload.get("instruction", ""), language=payload.get("language", ""),
-                        rounds=int(payload.get("rounds", 0)), look=bool(payload.get("look", False)),
-                        interactive=True, progress=progress)
+@flow_kind("revise_theme", "Designer: draw one of your themes again, as you ask or as its last criticism asks")
+def revise_theme_flow(book: Book, payload: dict[str, Any], progress) -> tuple[Any, dict[str, Any], list]:
+    record, instruction = _standing(payload["theme"], payload.get("instruction", ""))
+    standing = record["history"][-1]["answer"]
+    work = _theme_work(book, payload["theme"], record["brief"], based_on=record["based_on"],
+                       reference=record.get("reference", ""), language=payload.get("language", ""), revising=standing)
+    return work, {"request": instruction, "standing": standing}, _script(bool(payload.get("look")), 0)
 
 
-@kind("design_theme", "Designer: a new theme from a brief and references, built over the specimen and catalogued")
-def design_theme_job(book: Book, payload: dict[str, Any], actor: Actor, progress: Progress) -> dict[str, Any]:
-    return design_theme(book, payload["name"], payload.get("brief", ""), based_on=payload.get("based_on") or "nocturne",
-                        reference=payload.get("reference", ""), language=payload.get("language", ""),
-                        rounds=int(payload.get("rounds", 0)), look=bool(payload.get("look", True)),
-                        interactive=True, progress=progress)
+@flow_kind("design_theme", "Designer: a new theme from a brief and references, built over the specimen and catalogued")
+def design_theme_flow(book: Book, payload: dict[str, Any], progress) -> tuple[Any, dict[str, Any], list]:
+    name = payload["name"]
+    # Asked about a job that already drew it (a runtime that restarted): the theme exists, and is this one's.
+    standing = None
+    if payload.get("_resume") and _record(name).is_file():
+        import json
+
+        standing = json.loads(_record(name).read_text("utf-8"))["history"][-1]["answer"]
+    work = _theme_work(book, name, payload.get("brief", ""), based_on=payload.get("based_on") or "nocturne",
+                       reference=payload.get("reference", ""), language=payload.get("language", ""),
+                       revising=standing)
+    return work, {}, _script(bool(payload.get("look")), int(payload.get("rounds", 0)))

@@ -112,9 +112,11 @@ control room with the assistant, and it can be translated section by section.
   book and hands back a report or edits; a meta-agent that designs new ones
   and tries each before cataloguing it.
 
-- One flow on LangGraph (ADR 0020): draft, check, land, hold. The designer
-  and every manifest agent run on it; after work lands the author can always
-  have it critiqued and redone; a failed check never lands.
+- One flow on LangGraph (ADR 0020): draft, check, land, hold. Every agent
+  runs on it — researcher, architect, writer, revisers, translator, designer
+  and the manifest agents — each with named checks; after work lands the
+  author can always have it critiqued and redone, from Jobs or the chat; a
+  failed check never lands; a held flow survives a restart.
 
 ## Next action
 

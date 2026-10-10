@@ -710,6 +710,9 @@ export function JobsView({ language }: { language: string }) {
             <span className="muted"> — {job.requested_by.id} ({job.requested_by.kind}), {when(job.created_at)}</span></p>
           {job.progress.length > 0 && <p className="muted">{job.progress[job.progress.length - 1].message}</p>}
           {job.error && <p className="problem">{job.error}</p>}
+          {(((job.result?.reviews || job.result?.critiques) as { verdict: string; overall: string }[] | undefined) || []).map((r, i) => (
+            <p key={i} className="muted"><span className={`state ${r.verdict === "accept" ? "approved" : "waiting"}`}>
+              {r.verdict}</span> {r.overall}</p>))}
           {job.state === "waiting" && job.waiting && (
             <div className="held">
               <p>{job.waiting.message}</p>

@@ -29,7 +29,7 @@ studio = ["fastapi>=0.115", "uvicorn>=0.30", "httpx>=0.27"]
 # The assistant (ADR 0002): a LangGraph agent served over AG-UI to CopilotKit.
 # The model is reached through an adapter -- by default the Claude Code CLI,
 # with the author's own login -- so nothing here needs a key.
-agents = ["langgraph>=1.2", "ag-ui-langgraph>=0.0.45", "anthropic>=0.70"]
+agents = ["langgraph>=1.2", "langgraph-checkpoint-sqlite>=2.0", "ag-ui-langgraph>=0.0.45", "anthropic>=0.70"]
 
 [project.scripts]
 kdp = "kdp_studio.cli:main"

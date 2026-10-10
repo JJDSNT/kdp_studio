@@ -89,6 +89,9 @@ PROPOSALS = {
                     "brief: what the book is and how its page should feel, `subject` = the existing theme to "
                     "start from, `text` = a web address to look at as an external reference, if the author gave "
                     "one). It is built over the specimen text and, only if it builds, joins the gallery",
+    "answer_job": "answer work that is held in Jobs (read `jobs` for its id): `title` = the job id, `subject` = "
+                  "`critique` (a reviewer looks at it), `redo` (the agent does it again: `instruction` = what to "
+                  "change in the author's words, or empty to answer the last criticism) or `done` (close it)",
     "run_agent": "run one of the catalogue's agents (`title` = its id, read `agents` first; `section` when it "
                  "works on a section; `instruction` optional): a fact-checker, a technical reviewer, an "
                  "intention guardian, a continuity reviser, an art director, a KDP packager and others. A "
@@ -349,6 +352,26 @@ def build(model: Model, studio: Studio, checkpointer=None):
             payload = {"kind": "design_theme", "payload": {"name": p["title"], "brief": p["instruction"],
                                                            "based_on": p["subject"] or "nocturne",
                                                            "reference": p["text"], "language": p["language"]}}
+        elif p["action"] == "answer_job":
+            from .. import jobs as jobs_
+
+            what = {"critique": "pedir a crítica", "redo": "mandar refazer", "done": "fechar"}.get(p["subject"])
+            if what is None:
+                return {"messages": [AIMessage(content="Não entendi o que fazer com essa tarefa: criticar, refazer "
+                                                       "ou fechar?")], "proposal": {}}
+            answer = interrupt({"message": f"{what.capitalize()} a tarefa {p['title']}"
+                                           + (f": “{p['instruction']}”" if p["instruction"] else "") + "?",
+                                "proposal": {k: v for k, v in p.items() if k != "text"}})
+            if not (isinstance(answer, dict) and answer.get("approved")):
+                return {"messages": [AIMessage(content="Certo, não fiz nada.")], "proposal": {}}
+            try:
+                jobs_.answer(studio.book, p["title"], p["subject"], p["instruction"])
+            except Exception as error:  # noqa: BLE001
+                return {"messages": [AIMessage(content=f"Não deu: {getattr(error, 'message', error)}")],
+                        "proposal": {}}
+            return {"messages": [AIMessage(content="Feito. Acompanhe em Tarefas.")], "proposal": {},
+                    "navigate": {"view": "jobs", "language": p["language"], "section": "", "version": "",
+                                 "document": "", "id": uuid.uuid4().hex[:8]}}
         elif p["action"] == "run_agent":
             question = (f"Pôr o agente {p['title']} para trabalhar"
                         + (f" em {p['section']}" if p["section"] else " no livro")

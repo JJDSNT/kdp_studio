@@ -20,15 +20,16 @@ from typing import Any
 import yaml
 
 from ..book import Book, Part, split_frontmatter
-from ..checks import PASS, summary
+from ..checks import FAIL, PASS, summary
 from ..errors import NotFoundError, ValidationError
-from ..jobs import Progress, kind
+from ..jobs import Progress, flow_kind, kind
 from ..model import Model, model_from_env
 from ..state import Actor, read_state
 from ..style import catalogue
 from ..translation import (COVER_TEXT, GLOSSARY, META_TEXT, compare_translation, glossary, glossary_text, section_states)
 from ..versions import propose_version, read_section
-from .edits import book_context
+from .edits import book_context, version_text
+from .flow import SimpleWork, again, review_work, run_work
 
 AGENT = Actor("translator", "agent")
 
@@ -164,8 +165,8 @@ def _frontmatter(source_front: dict[str, Any], answer: dict[str, Any]) -> str:
     return "---\n" + yaml.safe_dump(front, allow_unicode=True, sort_keys=False, width=100).strip() + "\n---\n"
 
 
-def translate_section(book: Book, language: str, section: str, instruction: str = "", *,
-                      model: Model | None = None, progress=lambda message: None) -> dict[str, Any]:
+def _work(book: Book, language: str, section: str, instruction: str = "", *, model: Model | None = None,
+          reviewer: Model | None = None) -> SimpleWork:
     states = section_states(book, language)
     if section not in states:
         raise NotFoundError(f"No section {section!r} in the book")
@@ -194,23 +195,55 @@ def translate_section(book: Book, language: str, section: str, instruction: str 
                  f"still corresponds):\n{current}\n\n" if current.strip() else "")
               + f"The author's instruction:\n{instruction.strip() or '(none)'}\n\n"
               f"The section to translate ({section}):\n\n{source_text}")
-    progress(f"Translating {section} into {language}")
-    answer = (model or model_from_env()).ask(SYSTEM, prompt, SCHEMA)
-    text = _frontmatter(source_front, answer) + "\n" + str(answer["body"]).strip() + "\n"
-    task = {"agent": AGENT.id, "source_language": source_language, "source_digest": states[section]["source_digest"],
-            "instruction": instruction.strip(), "adaptations": answer.get("adaptations") or [],
-            "terms": answer.get("terms") or [], "notes": answer.get("notes", "")}
-    version = propose_version(book, language, section, text, actor=AGENT, scope="content",
-                              rationale=f"Translation from {source_language} by the translator"
-                              + (f": {instruction.strip()}" if instruction.strip() else "."),
-                              task=json.dumps(task, ensure_ascii=False))
-    findings = compare_translation(source_text, text, source_language=source_language, language=language, terms=terms)
-    open_findings = [f.public_dict() for f in findings if f.verdict != PASS]
-    progress(f"Recorded a candidate version ({len(open_findings)} finding(s) to read)")
-    return {"version": version["id"], "section": section, "language": language,
-            "words": len(str(answer["body"]).split()), "checks": summary(findings), "findings": open_findings,
-            "adaptations": task["adaptations"], "terms": task["terms"], "notes": task["notes"],
-            "summary": task["notes"]}
+    chosen = model or model_from_env()
+
+    def text_of(answer: dict[str, Any]) -> str:
+        return _frontmatter(source_front, answer) + "\n" + str(answer.get("body", "")).strip() + "\n"
+
+    def ask(request: str, standing: dict[str, Any] | None, error: str) -> dict[str, Any]:
+        return chosen.ask(SYSTEM, again(prompt, request, standing, error), SCHEMA)
+
+    def structure_kept(answer: dict[str, Any]) -> list[str]:
+        """What a translation may not lose, measured: a failure goes back to the translator with the measure."""
+
+        found = compare_translation(source_text, text_of(answer), source_language=source_language,
+                                    language=language, terms=terms)
+        return [f"{f.item}: {f.measured} (the source has {f.required})" + (f" — {f.detail}" if f.detail else "")
+                for f in found if f.verdict == FAIL]
+
+    def land(answer: dict[str, Any]) -> dict[str, Any]:
+        text = text_of(answer)
+        task = {"agent": AGENT.id, "source_language": source_language,
+                "source_digest": states[section]["source_digest"], "instruction": instruction.strip(),
+                "adaptations": answer.get("adaptations") or [], "terms": answer.get("terms") or [],
+                "notes": answer.get("notes", "")}
+        version = propose_version(book, language, section, text, actor=AGENT, scope="content",
+                                  rationale=f"Translation from {source_language} by the translator"
+                                  + (f": {instruction.strip()}" if instruction.strip() else "."),
+                                  task=json.dumps(task, ensure_ascii=False))
+        findings = compare_translation(source_text, text, source_language=source_language, language=language,
+                                       terms=terms)
+        return {"version": version["id"], "section": section, "language": language,
+                "words": len(str(answer["body"]).split()), "checks": summary(findings),
+                "findings": [f.public_dict() for f in findings if f.verdict != PASS],
+                "adaptations": task["adaptations"], "terms": task["terms"], "notes": task["notes"],
+                "summary": task["notes"]}
+
+    def review(outcome: dict[str, Any]) -> dict[str, Any]:
+        # A reader of the target language who never saw the source: where does it sound translated?
+        return review_work(reviewer or chosen, title="Translator",
+                           role=f"Adapts a section into {language} for a reader who lives in that language; a text "
+                                "that reads as translated has failed. Judge only the text below, as that reader.",
+                           shown=f"The glossary it had to follow:\n{glossary_text(terms, source_language, language)}",
+                           answered=version_text(book, language, section, outcome.get("version")))
+
+    return SimpleWork(f"Translator: {section} → {language}", ask=ask, land=land, review=review,
+                      checks=[("structure_kept", structure_kept)], attempts=3)
+
+
+def translate_section(book: Book, language: str, section: str, instruction: str = "", *,
+                      model: Model | None = None, progress=lambda message: None) -> dict[str, Any]:
+    return run_work(_work(book, language, section, instruction, model=model), progress=progress)
 
 
 def pending(book: Book, language: str) -> list[str]:
@@ -309,10 +342,9 @@ def propose_glossary(book: Book, language: str, *, model: Model | None = None) -
     return {"glossary": draft, "terms": len(terms), "keep": len(data["keep"]), "notes": answer.get("notes", "")}
 
 
-@kind("translate_section", "Translator: adapt one section into another language, as a candidate version")
-def translate_section_job(book: Book, payload: dict[str, Any], actor: Actor, progress: Progress) -> dict[str, Any]:
-    return translate_section(book, payload["language"], payload["section"], payload.get("instruction", ""),
-                             progress=progress)
+@flow_kind("translate_section", "Translator: adapt one section into another language, as a candidate version")
+def translate_section_flow(book: Book, payload: dict[str, Any], progress) -> tuple[Any, dict[str, Any], list]:
+    return _work(book, payload["language"], payload["section"], payload.get("instruction", "")), {}, []
 
 
 @kind("translate_book", "Translator: every untranslated or stale section of a language, each as a candidate version")

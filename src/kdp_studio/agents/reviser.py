@@ -13,12 +13,13 @@ from typing import Any
 
 from ..book import Book
 from ..errors import ValidationError
-from ..jobs import Progress, kind
+from ..jobs import flow_kind
 from ..model import Model, model_from_env
 from ..state import Actor
 from ..style import catalogue
 from ..versions import SCOPES, read_section
-from .edits import EDITS_RULES, EDITS_SCHEMA, book_context, clean, record
+from .edits import EDITS_RULES, EDITS_SCHEMA, book_context, clean, edit_checks, record, version_text
+from .flow import SimpleWork, again, review_work, run_work
 
 AGENT = Actor("reviser", "agent")
 
@@ -31,8 +32,8 @@ SYSTEM = (
 )
 
 
-def revise_section(book: Book, language: str, section: str, instruction: str, scope: str, *,
-                   model: Model | None = None, progress=lambda message: None) -> dict[str, Any]:
+def _work(book: Book, language: str, section: str, instruction: str, scope: str, *, model: Model | None = None,
+          reviewer: Model | None = None) -> SimpleWork:
     if scope not in SCOPES:
         raise ValidationError(f"Unknown scope {scope!r}", allowed=sorted(SCOPES))
     if not instruction.strip():
@@ -41,17 +42,32 @@ def revise_section(book: Book, language: str, section: str, instruction: str, sc
     current = read_section(book, language, section)
     prompt = (f"The book:\n{book_context(book, settings)}\n\nScope: {scope} — {SCOPES[scope]}\n\n"
               f"The author's instruction:\n{instruction}\n\nThe section ({language}, {section}):\n\n{current['text']}")
-    progress("Asking the model for edits")
-    answer = clean((model or model_from_env()).ask(SYSTEM, prompt, EDITS_SCHEMA))
-    result = record(book, language, section, answer, agent=AGENT, scope=scope, rationale=instruction.strip(),
-                    task={"agent": "reviser", "instruction": instruction})
-    result.pop("candidate", None)
-    if result.get("version"):
-        progress(f"Applied {result['applied']} edit(s); recorded a candidate version")
-    return result
+    chosen = model or model_from_env()
+
+    def ask(request: str, standing: dict[str, Any] | None, error: str) -> dict[str, Any]:
+        return clean(chosen.ask(SYSTEM, again(prompt, request, standing, error), EDITS_SCHEMA))
+
+    def land(answer: dict[str, Any]) -> dict[str, Any]:
+        result = record(book, language, section, answer, agent=AGENT, scope=scope, rationale=instruction.strip(),
+                        task={"agent": "reviser", "instruction": instruction})
+        result.pop("candidate", None)
+        return {**result, "section": section, "language": language}
+
+    def review(outcome: dict[str, Any]) -> dict[str, Any]:
+        return review_work(reviewer or chosen, title="Reviser",
+                           role=f"Changes one section exactly as the author's instruction asks, under the scope {scope}.",
+                           shown=prompt, answered=version_text(book, language, section, outcome.get("version")))
+
+    return SimpleWork(f"Reviser: {section}", ask=ask, land=land, review=review,
+                      checks=edit_checks(book, language, section, scope))
 
 
-@kind("revise_section", "Reviser: change a section as the author's instruction asks, as a candidate version")
-def revise_section_job(book: Book, payload: dict[str, Any], actor: Actor, progress: Progress) -> dict[str, Any]:
-    return revise_section(book, payload.get("language") or book.source_language, payload["section"],
-                          payload.get("instruction", ""), payload.get("scope", "content"), progress=progress)
+def revise_section(book: Book, language: str, section: str, instruction: str, scope: str, *,
+                   model: Model | None = None, progress=lambda message: None) -> dict[str, Any]:
+    return run_work(_work(book, language, section, instruction, scope, model=model), progress=progress)
+
+
+@flow_kind("revise_section", "Reviser: change a section as the author's instruction asks, as a candidate version")
+def revise_section_flow(book: Book, payload: dict[str, Any], progress) -> tuple[Any, dict[str, Any], list]:
+    return _work(book, payload.get("language") or book.source_language, payload["section"],
+                 payload.get("instruction", ""), payload.get("scope", "content")), {}, []

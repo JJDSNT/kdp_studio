@@ -165,3 +165,46 @@ def test_the_author_can_always_have_work_critiqued_and_redone(sample, tmp_path, 
     assert job["state"] == "done" and len(list((sample / "reports" / "intention-guardian").glob("*.md"))) == 2
     with pytest.raises(ValidationError, match="not waiting"):
         jobs.answer(book, job["id"], "redo", wait=True)
+
+
+def test_a_held_job_can_still_be_answered_after_the_runtime_restarts(sample, tmp_path, monkeypatch):
+    from kdp_studio import jobs
+    from kdp_studio.state import Actor
+
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    book = load_book(sample)
+    review = {"overall": "Thin.", "verdict": "revise", "problems": [{"what": "w", "why": "y", "fix": "quote it"}]}
+    model = Answers(REPORT, review, {**REPORT, "summary": "second answer"})
+    monkeypatch.setattr("kdp_studio.agents.manifest.model_from_env", lambda: model)
+    job = jobs.start(book, "run_agent", {"agent": "intention-guardian", "section": "01-first-light"},
+                     Actor("author"), wait=True)
+    assert job["state"] == "waiting"
+    # The runtime stops: the flow it held in memory is gone, the job and its checkpoint are on disk.
+    jobs.HELD.clear()
+    jobs.reconcile(book)
+    assert jobs.get_job(book, job["id"])["state"] == "waiting"
+    job = jobs.answer(book, job["id"], "critique", wait=True)
+    assert job["state"] == "waiting" and job["waiting"]["verdict"] == "revise"
+    jobs.HELD.clear()
+    job = jobs.answer(book, job["id"], "redo", wait=True)
+    assert job["result"]["summary"] == "second answer" and "quote it" in model.asked[2]["prompt"]
+
+
+def test_the_agents_written_in_code_run_on_the_same_flow(sample):
+    from kdp_studio import jobs
+
+    import kdp_studio.agents  # noqa: F401 - registers the kinds
+
+    on_the_flow = {"research", "plan_book", "write_section", "revise_section", "revise_voice", "translate_section",
+                   "design_theme", "revise_theme", "run_agent"}
+    assert on_the_flow <= set(jobs.FLOW_KINDS)
+    from kdp_studio.agents.architect import plan_complete
+    from kdp_studio.agents.researcher import sources_cited
+    from kdp_studio.agents.writer import manuscript_format
+
+    assert manuscript_format("# A title\n\n<div>x</div>\n\nText.") and not manuscript_format("## A part\n\nText.")
+    assert sources_cited({"sources": [{"url": "https://a.org", "title": "A"}],
+                          "findings": [{"claim": "c", "sources": ["https://b.org"], "confidence": "verified"}]})
+    assert plan_complete(load_book(sample), {"parts": [{"title": "P", "chapters": [
+        {"title": "C", "synopsis": "s", "promise": "", "research": ["missing"]}]}]}) == [
+        "“C” has no promise: what can the reader do after it?", "“C” names research that does not exist: missing"]

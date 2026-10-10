@@ -20,11 +20,12 @@ import yaml
 from ..book import Book
 from ..errors import ValidationError
 from ..history import commit
-from ..jobs import Progress, kind
+from ..jobs import flow_kind
 from ..model import Model, model_from_env
 from ..state import Actor, book_lock, now
 from ..structure import slug
 from .edits import book_context
+from .flow import SimpleWork, again, review_work, run_work
 
 AGENT = Actor("researcher", "agent")
 LEDGER = "research/sources.yaml"
@@ -94,8 +95,24 @@ def _dossier(question: str, answer: dict[str, Any], opened: str, words: dict[str
     return "\n".join(lines)
 
 
-def research(book: Book, question: str, *, name: str = "", model: Model | None = None,
-             progress=lambda message: None) -> dict[str, Any]:
+def sources_cited(answer: dict[str, Any]) -> list[str]:
+    """`sources_cited`: a finding rests on sources the dossier lists, and each of those has an address."""
+
+    listed = {str(s.get("url", "")) for s in answer.get("sources") or []}
+    problems = [f"A source has no address that can be opened: {s.get('title', '?')!r}"
+                for s in answer.get("sources") or [] if not str(s.get("url", "")).startswith(("http://", "https://"))]
+    for finding in answer.get("findings") or []:
+        loose = [url for url in finding.get("sources") or [] if url not in listed]
+        if loose:
+            problems.append(f"The finding “{str(finding.get('claim', ''))[:70]}” cites what `sources` does not "
+                            f"list: {', '.join(loose[:3])}")
+        if finding.get("confidence") == "verified" and not finding.get("sources"):
+            problems.append(f"The finding “{str(finding.get('claim', ''))[:70]}” is called verified with no source")
+    return problems[:8]
+
+
+def _work(book: Book, question: str, *, name: str = "", model: Model | None = None,
+          reviewer: Model | None = None) -> SimpleWork:
     if not question.strip():
         raise ValidationError("Research needs a question")
     from ..style import catalogue
@@ -103,39 +120,57 @@ def research(book: Book, question: str, *, name: str = "", model: Model | None =
     _, settings = catalogue(book, book.source_language)
     prompt = (f"The book:\n{book_context(book, settings)}\n\nWhat the author needs researched:\n{question}\n\n"
               f"Already in the book's research: {', '.join(d['title'] for d in dossiers(book)) or 'nothing yet'}.")
-    progress("Searching and opening sources")
-    answer = (model or model_from_env()).ask(SYSTEM, prompt, SCHEMA, web=True)
-    opened = now()[:10]
-    dossier_slug = slug(name or question)[:50]
-    folder = book.root / "research"
-    with book_lock(book.root):
-        folder.mkdir(parents=True, exist_ok=True)
-        path = folder / f"{dossier_slug}.md"
-        n = 2
-        while path.exists():
-            path, n = folder / f"{dossier_slug}-{n}.md", n + 1
-        from ..labels import labels
+    chosen = model or model_from_env()
 
-        words = labels(book.source_language)["research"]
-        path.write_text(_dossier(question.strip(), answer, opened, words), encoding="utf-8")
-        entries = ledger(book)
-        known = {e["url"] for e in entries}
-        for source in answer.get("sources") or []:
-            if source["url"] not in known:
-                entries.append({"url": source["url"], "title": source["title"], "opened": opened,
-                                "says": source["says"], "dossier": path.stem,
-                                **({"publisher": source["publisher"]} if source.get("publisher") else {}),
-                                **({"published": source["published"]} if source.get("published") else {})})
-        ledger_path = book.root / LEDGER
-        ledger_path.write_text(yaml.safe_dump(entries, allow_unicode=True, sort_keys=False, width=100),
-                               encoding="utf-8")
-        commit(book.root, [path, ledger_path], f"Research: {question.strip()[:80]}", AGENT)
-    progress(f"Recorded {len(answer.get('sources') or [])} source(s)")
-    return {"dossier": str(path.relative_to(book.root)), "sources": len(answer.get("sources") or []),
-            "findings": len(answer.get("findings") or []), "not_found": answer.get("not_found") or [],
-            "summary": answer.get("summary", "")}
+    def ask(request: str, standing: dict[str, Any] | None, error: str) -> dict[str, Any]:
+        return chosen.ask(SYSTEM, again(prompt, request, standing, error), SCHEMA, web=True)
+
+    def land(answer: dict[str, Any]) -> dict[str, Any]:
+        opened = now()[:10]
+        dossier_slug = slug(name or question)[:50]
+        folder = book.root / "research"
+        with book_lock(book.root):
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / f"{dossier_slug}.md"
+            n = 2
+            while path.exists():
+                path, n = folder / f"{dossier_slug}-{n}.md", n + 1
+            from ..labels import labels
+
+            words = labels(book.source_language)["research"]
+            path.write_text(_dossier(question.strip(), answer, opened, words), encoding="utf-8")
+            entries = ledger(book)
+            known = {e["url"] for e in entries}
+            for source in answer.get("sources") or []:
+                if source["url"] not in known:
+                    entries.append({"url": source["url"], "title": source["title"], "opened": opened,
+                                    "says": source["says"], "dossier": path.stem,
+                                    **({"publisher": source["publisher"]} if source.get("publisher") else {}),
+                                    **({"published": source["published"]} if source.get("published") else {})})
+            ledger_path = book.root / LEDGER
+            ledger_path.write_text(yaml.safe_dump(entries, allow_unicode=True, sort_keys=False, width=100),
+                                   encoding="utf-8")
+            commit(book.root, [path, ledger_path], f"Research: {question.strip()[:80]}", AGENT)
+        return {"dossier": str(path.relative_to(book.root)), "sources": len(answer.get("sources") or []),
+                "findings": len(answer.get("findings") or []), "not_found": answer.get("not_found") or [],
+                "summary": answer.get("summary", "")}
+
+    def review(outcome: dict[str, Any]) -> dict[str, Any]:
+        return review_work(reviewer or chosen, title="Researcher",
+                           role="Searches, opens what it cites, and says what it did not find. You did not open the "
+                                "sources: judge whether each finding is tied to one, whether the dossier answers "
+                                "the question asked, and what a fact-checker should open first.",
+                           shown=prompt, answered=(book.root / outcome["dossier"]).read_text("utf-8"))
+
+    return SimpleWork(f"Researcher: {question.strip()[:60]}", ask=ask, land=land, review=review,
+                      checks=[("sources_cited", sources_cited)])
 
 
-@kind("research", "Researcher: search, open and record sources into a dossier")
-def research_job(book: Book, payload: dict[str, Any], actor: Actor, progress: Progress) -> dict[str, Any]:
-    return research(book, payload.get("question", ""), name=payload.get("name", ""), progress=progress)
+def research(book: Book, question: str, *, name: str = "", model: Model | None = None,
+             progress=lambda message: None) -> dict[str, Any]:
+    return run_work(_work(book, question, name=name, model=model), progress=progress)
+
+
+@flow_kind("research", "Researcher: search, open and record sources into a dossier")
+def research_flow(book: Book, payload: dict[str, Any], progress) -> tuple[Any, dict[str, Any], list]:
+    return _work(book, payload.get("question", ""), name=payload.get("name", "")), {}, []

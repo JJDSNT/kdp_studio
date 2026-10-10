@@ -177,8 +177,9 @@ def test_the_author_confirms_a_translation_made_by_hand(bilingual):
 
 def test_the_whole_book_is_translated_section_by_section(bilingual):
     book = load_book(bilingual)
-    model = Answers(translated("Um prefácio.", "Prefácio"), translated(), {"broken": True},
-                    translated("O que fica é o que foi feito.", "O que fica"))
+    # A translation that loses the structure goes back to the translator; after three it is given up.
+    model = Answers(translated("Um prefácio.", "Prefácio"), translated(), {"broken": True}, {"broken": True},
+                    {"broken": True}, translated("> [!warning] Não é o fim\n> Só o fim da amostra.", "O que fica"))
     result = translate_book(book, "pt-BR", model=model)
     assert [t["section"] for t in result["translated"]] == ["00-preface", "01-first-light", "03-what-remains"]
     assert [f["section"] for f in result["failed"]] == ["02-the-workshop"]

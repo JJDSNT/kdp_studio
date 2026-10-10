@@ -432,13 +432,18 @@ def test_a_critic_looks_at_the_pages_and_the_designer_answers_it(sample, tmp_pat
     seen = revise_theme(book, "almanac", "smaller title", model=quiet, critic=once, look=True)
     assert len(quiet.asked) == 1 and len(once.seen) == 1 and seen["critiques"][0]["verdict"] == "revise"
     # In the control room the work is held: the author critiques and redoes as often as they like.
-    from kdp_studio.agents.designer import design_theme as draw
+    from kdp_studio.agents.designer import _theme_work
+    from kdp_studio.agents.flow import Flow
 
     drawer, eye2 = Drawer("fieldbook"), Eye("revise", "accept")
-    held = draw(book, "fieldbook", "A field guide.", model=drawer, critic=eye2, interactive=True)
+    flow = Flow(_theme_work(book, "fieldbook", "A field guide.", model=drawer, critic=eye2), interactive=True)
+    held = flow.start()
     assert held["waiting"]["reviewed"] is False and len(drawer.asked) == 1 and eye2.seen == []
-    from kdp_studio.agents.flow import Flow  # noqa: F401 - the flow is what holds it
-
+    held = flow.answer("critique")
+    assert held["waiting"]["verdict"] == "revise" and len(drawer.asked) == 1
+    held = flow.answer("redo")
+    assert len(drawer.asked) == 2 and held["drawings"] == 2 and "waiting" in held
+    assert "waiting" not in flow.answer("done")
     assert remove_theme("fieldbook")["removed"] == ["print", "ebook", "cover"]
     assert remove_theme("almanac")["removed"] == ["print", "ebook", "cover"]
     assert "almanac" not in {t["name"] for t in gallery.themes(sample)}

@@ -63,7 +63,7 @@ def test_research_records_opened_sources_and_what_was_not_found(new_book):
 PLAN = {"rationale": "Do vaso ao prato.", "front": [{"title": "Antes de começar", "synopsis": "O que esperar."}],
         "parts": [{"title": "A varanda", "guiding_case": "a varanda da Ana", "chapters": [
             {"title": "Ler a luz", "synopsis": "Medir o sol.", "promise": "Saber o que cabe na sua varanda.",
-             "research": ["quanto-sol"]},
+             "research": []},
             {"title": "O primeiro vaso", "synopsis": "Plantar.", "promise": "Plantar sem matar.", "research": []}]}],
         "gaps": []}
 

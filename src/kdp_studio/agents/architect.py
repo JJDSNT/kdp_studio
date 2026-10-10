@@ -21,11 +21,12 @@ import yaml
 
 from ..book import Book, load_book
 from ..errors import NotFoundError, ValidationError
-from ..jobs import Progress, kind
+from ..jobs import flow_kind
 from ..model import Model, model_from_env
 from ..state import Actor, book_lock, commit_state, now, read_state
 from ..structure import _stub, slug
 from .edits import book_context
+from .flow import SimpleWork, again, review_work, run_work
 from .researcher import dossiers
 
 AGENT = Actor("architect", "agent")
@@ -65,8 +66,31 @@ def _current(book: Book) -> str:
     return "\n".join(lines) or "(no chapters yet)"
 
 
-def propose_plan(book: Book, instruction: str = "", *, model: Model | None = None,
-                 progress=lambda message: None) -> dict[str, Any]:
+def plan_complete(book: Book, plan: dict[str, Any]) -> list[str]:
+    """`plan_complete`: every chapter says what it covers and what the reader can do after it, and names
+    only research that exists."""
+
+    known = {d["slug"] for d in dossiers(book)}
+    problems = []
+    if not plan.get("parts"):
+        problems.append("The plan has no parts.")
+    for part in plan.get("parts") or []:
+        if not part.get("chapters"):
+            problems.append(f"The part “{part.get('title', '?')}” has no chapters.")
+        for chapter in part.get("chapters") or []:
+            title = chapter.get("title", "?")
+            if not str(chapter.get("promise", "")).strip():
+                problems.append(f"“{title}” has no promise: what can the reader do after it?")
+            if not str(chapter.get("synopsis", "")).strip():
+                problems.append(f"“{title}” has no synopsis.")
+            missing = [name for name in chapter.get("research") or [] if name not in known]
+            if missing:
+                problems.append(f"“{title}” names research that does not exist: {', '.join(missing)}")
+    return problems[:10]
+
+
+def _work(book: Book, instruction: str = "", *, model: Model | None = None,
+          reviewer: Model | None = None) -> SimpleWork:
     from ..style import catalogue
 
     _, settings = catalogue(book, book.source_language)
@@ -74,22 +98,44 @@ def propose_plan(book: Book, instruction: str = "", *, model: Model | None = Non
     prompt = (f"The book:\n{book_context(book, settings)}\n\nResearch dossiers:\n{research}\n\n"
               f"Current chapters:\n{_current(book)}\n\n"
               f"The author's instruction for the plan:\n{instruction.strip() or '(none: propose the plan)'}")
-    progress("Designing the plan")
-    plan = (model or model_from_env()).ask(SYSTEM, prompt, SCHEMA)
-    plan_id = f"plan-{uuid.uuid4().hex[:8]}"
-    with book_lock(book.root):
-        state = read_state(book.root)
-        entry = {"id": plan_id, "state": "candidate", "proposed_at": now(), "proposed_by": AGENT.public_dict(),
-                 "instruction": instruction, "plan": plan}
-        state.setdefault("plans", {})[plan_id] = entry
-        state["history"].append({"at": entry["proposed_at"], "event": "plan_proposed", "plan": plan_id,
-                                 "actor": AGENT.public_dict()})
-        commit_state(book.root, state, expected_revision=None, actor=AGENT,
-                     message=f"Propose {plan_id}: {len(plan.get('parts') or [])} part(s), "
-                     f"{sum(len(p['chapters']) for p in plan.get('parts') or [])} chapter(s)")
-    chapters = sum(len(p["chapters"]) for p in plan.get("parts") or [])
-    return {"plan": plan_id, "parts": len(plan.get("parts") or []), "chapters": chapters,
-            "gaps": plan.get("gaps") or [], "summary": plan.get("rationale", "")}
+    chosen = model or model_from_env()
+
+    def ask(request: str, standing: dict[str, Any] | None, error: str) -> dict[str, Any]:
+        return chosen.ask(SYSTEM, again(prompt, request, standing, error), SCHEMA)
+
+    def land(plan: dict[str, Any]) -> dict[str, Any]:
+        plan_id = f"plan-{uuid.uuid4().hex[:8]}"
+        with book_lock(book.root):
+            state = read_state(book.root)
+            entry = {"id": plan_id, "state": "candidate", "proposed_at": now(), "proposed_by": AGENT.public_dict(),
+                     "instruction": instruction, "plan": plan}
+            state.setdefault("plans", {})[plan_id] = entry
+            state["history"].append({"at": entry["proposed_at"], "event": "plan_proposed", "plan": plan_id,
+                                     "actor": AGENT.public_dict()})
+            commit_state(book.root, state, expected_revision=None, actor=AGENT,
+                         message=f"Propose {plan_id}: {len(plan.get('parts') or [])} part(s), "
+                         f"{sum(len(p['chapters']) for p in plan.get('parts') or [])} chapter(s)")
+        chapters = sum(len(p["chapters"]) for p in plan.get("parts") or [])
+        return {"plan": plan_id, "parts": len(plan.get("parts") or []), "chapters": chapters,
+                "gaps": plan.get("gaps") or [], "summary": plan.get("rationale", "")}
+
+    def review(outcome: dict[str, Any]) -> dict[str, Any]:
+        import json
+
+        plan = read_state(book.root)["plans"][outcome["plan"]]["plan"]
+        return review_work(reviewer or chosen, title="Architect",
+                           role="Designs parts and chapters as a progression of capability, not as coverage of a "
+                                "field: judge whether each promise is something a reader can DO, whether the order "
+                                "builds, and what a chapter takes that belongs to another.",
+                           shown=prompt, answered=json.dumps(plan, ensure_ascii=False, indent=1))
+
+    return SimpleWork("Architect: the plan", ask=ask, land=land, review=review,
+                      checks=[("plan_complete", lambda plan: plan_complete(book, plan))])
+
+
+def propose_plan(book: Book, instruction: str = "", *, model: Model | None = None,
+                 progress=lambda message: None) -> dict[str, Any]:
+    return run_work(_work(book, instruction, model=model), progress=progress)
 
 
 def _unnumbered(title: str) -> str:
@@ -165,6 +211,6 @@ def adopt_plan(book: Book, plan_id: str, *, actor: Actor, rationale: str = "") -
     return {"plan": plan_id, "sections": len(written)}
 
 
-@kind("plan_book", "Architect: propose parts and chapters, each with a synopsis and a promise")
-def plan_job(book: Book, payload: dict[str, Any], actor: Actor, progress: Progress) -> dict[str, Any]:
-    return propose_plan(book, payload.get("instruction", ""), progress=progress)
+@flow_kind("plan_book", "Architect: propose parts and chapters, each with a synopsis and a promise")
+def plan_flow(book: Book, payload: dict[str, Any], progress) -> tuple[Any, dict[str, Any], list]:
+    return _work(book, payload.get("instruction", "")), {}, []

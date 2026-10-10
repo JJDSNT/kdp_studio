@@ -92,7 +92,9 @@ def _jobs(studio: Studio, args: dict[str, Any]) -> str:
 
     found = list_jobs(studio.book)[:10]
     lines = [f"- {j['id']} {j['kind']} {j['payload']}: {j['state']}"
-             + (f" → {j['result']}" if j.get("result") else "")
+             + (f" — HELD for the author ({j['waiting']['message']}): `answer_job` with this id to critique, redo "
+                "or close it" if j["state"] == "waiting" and j.get("waiting") else "")
+             + (f" → {str(j['result'])[:1500]}" if j.get("result") else "")
              + (f" ({j['error']})" if j.get("error") else "") for j in found]
     return "\n".join(lines) or "No jobs."
 

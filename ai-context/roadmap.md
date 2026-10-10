@@ -89,6 +89,15 @@ Later (noted 2026-10-04, at the author's request — not now):
   with "use this theme". Remaining: a theme previewed on the author's own
   chapter, more themes and trims.
 
+- **Read aloud, locally** (the author, 2026-10-10). A text-to-speech engine
+  on this machine reads the book to its author — a chapter from the control
+  room, or the whole book as audio files: listening is how a writer hears
+  what the eye forgives. Local and open (Piper, which Cine Toaster already
+  drives as an external program, has Brazilian Portuguese and English
+  voices); nothing leaves the machine. What is read is the reader's text —
+  the same extraction the fidelity auditor uses — with prompts, code and
+  editorial comments left out or announced. Not an audiobook for sale.
+
 - **An OPDS catalogue.** The built ebooks served over OPDS (from `kdp serve`,
   over the library it already knows — ADR 0014 — or a small server of its own), so the author reads each new build on a
   reader or phone without downloading files by hand. One feed per book,
