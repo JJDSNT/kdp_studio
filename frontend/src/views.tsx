@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Editor from "./Editor.tsx";
 import {
-  get, openBook, runCommand, type BookOverview, type Catalogue, type EditionState, type EpubSpine, type Finding,
-  type Gate, type Info, type LibraryBook, type Section, type SectionEntry, type TranslationReport, type VersionReport,
+  get, openBook, renderTheme, runCommand, type BookOverview, type Catalogue, type EditionState, type EpubSpine, type Finding,
+  type Gate, type Info, type LibraryBook, type Section, type SectionEntry, type Theme, type TranslationReport, type VersionReport,
 } from "./api.ts";
 import { go, href, type Route } from "./route.ts";
 
@@ -920,51 +920,111 @@ export function LibraryView() {
 
 // ------------------------------------------------------------ templates
 
-export function TemplatesView() {
-  const { data, error } = useQuery(() => get<Catalogue>("/api/templates"), []);
-  if (error) return <Problem text={error} />;
-  if (!data) return <p className="muted">Loading…</p>;
-  const kinds: [string, string][] = [["print", "Print interior"], ["ebook", "Ebook"], ["cover", "Cover"]];
+const PAGE_ROLES: [string, string][] = [["part", "Part opening"], ["chapter", "Chapter opening"],
+  ["callouts", "Callouts"], ["exercise", "Exercise"]];
+
+export function TemplatesView({ language, onChanged }: { language: string; onChanged: () => void }) {
+  const themes = useQuery(() => get<Theme[]>("/api/gallery", { lang: language }), [language]);
+  const catalogue = useQuery(() => get<Catalogue>("/api/templates"), []);
+  const [rendering, setRendering] = useState("");
+  const [status, setStatus] = useState("");
+  const [zoom, setZoom] = useState("");
+  const pending = themes.data?.find((t) => !t.render)?.name || "";
+
+  // One theme at a time: each render runs LuaLaTeX over the specimen.
+  useEffect(() => {
+    if (!pending || rendering) return;
+    setRendering(pending);
+    renderTheme(pending, language)
+      .catch((e: Error) => setStatus(`${pending}: ${e.message}`))
+      .finally(() => { setRendering(""); themes.reload(); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, language]);
+
+  async function use(theme: string) {
+    const reason = window.prompt(`Take the theme “${theme}” for this book? Say why, for the book's history.`, "");
+    if (reason === null) return;
+    try {
+      await runCommand("set_theme", { theme, reason });
+      themes.reload();
+      catalogue.reload();
+      onChanged();
+      setStatus(`The book now uses ${theme}. Build the editions again to see it on your own text.`);
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+
+  if (themes.error) return <Problem text={themes.error} />;
+  if (!themes.data) return <p className="muted">Loading the themes…</p>;
   return (
-    <div className="page">
-      <h1>Templates</h1>
-      <p className="muted">How the book looks in each medium. The book names one per edition under <code>editions</code> in
-        <code> book.yaml</code>; changing the design of a book is changing that name. Built-in templates ship with KDP Studio,
-        and a book may bring its own in <code>templates/&lt;kind&gt;/&lt;name&gt;/</code>.</p>
-      {kinds.map(([kind, label]) => (
-        <section key={kind}>
-          <h2>{label}</h2>
-          {data.templates.filter((t) => t.kind === kind).map((t) => (
-            <div key={t.name} className={`gate ${t.in_use ? "approved" : ""}`}>
-              <p><strong>{t.title}</strong> <code>{t.name}</code> <span className="muted">{t.source}</span>
-                {t.in_use && <span className="badge">used by this book</span>}</p>
-              <p>{t.description}</p>
-              <p className="muted">{t.origin}{t.fonts.length > 0 && <> · {t.fonts.join(", ")}</>}
-                {t.trims.length > 0 && <> · trims: {t.trims.join(", ")}</>}</p>
-              {Object.keys(t.colors).length > 0 && (
-                <p className="swatches">{Object.entries(t.colors).map(([name, value]) => {
-                  const shown = t.in_use && data.overrides[name] ? data.overrides[name] : value;
-                  return <span key={name} title={`${name} #${shown}${shown !== value ? " (this book's)" : ""}`}
-                    style={{ background: `#${shown}` }} />;
-                })}</p>
-              )}
+    <div className="page gallery">
+      <h1>Themes</h1>
+      <p className="muted">Each theme applied to the same sample text, so a design is chosen by looking: the print
+        interior, the cover and the ebook. Taking a theme changes one name per edition in <code>book.yaml</code>; your
+        text is not touched, and you can come back.</p>
+      <Problem text={status} />
+      {themes.data.map((theme) => {
+        const print = theme.kinds.print || theme.kinds.ebook || theme.kinds.cover;
+        const base = theme.render ? `/gallery/${theme.render.key}` : "";
+        const chapter = theme.render?.ebook.find((f) => f.startsWith("text-") && !f.includes("praefatio"));
+        return (
+          <section key={theme.name} className={`theme ${theme.in_use ? "in-use" : ""}`}>
+            <div className="theme-head">
+              <h2>{theme.title} <code>{theme.name}</code>
+                {theme.in_use ? <span className="badge">used by this book</span>
+                  : theme.used_by.length > 0 && <span className="badge">used for {theme.used_by.join(", ")}</span>}</h2>
+              {!theme.in_use && <button onClick={() => use(theme.name)}>Use this theme</button>}
+            </div>
+            <p>{print.description}</p>
+            <p className="muted">{Object.keys(theme.kinds).join(" · ")} · {theme.source}
+              {print.fonts.length > 0 && <> · {print.fonts.join(", ")}</>}</p>
+            {Object.keys(print.colors).length > 0 && (
+              <p className="swatches">{Object.entries(print.colors).map(([name, value]) => (
+                <span key={name} title={`${name} #${value}`} style={{ background: `#${value}` }} />))}</p>
+            )}
+            {!theme.render ? (
+              <p className="muted">{rendering === theme.name ? "Rendering over the sample text…" : "Waiting to be rendered…"}</p>
+            ) : (
+              <div className="strip">
+                {theme.render.cover && (
+                  <figure onClick={() => setZoom(`${base}/${theme.render!.cover}`)}>
+                    <img src={`${base}/${theme.render.cover}`} alt="cover" /><figcaption>Cover</figcaption></figure>)}
+                {PAGE_ROLES.map(([role, label]) => {
+                  const page = theme.render!.pages.find((p) => p.role === role);
+                  return page ? (
+                    <figure key={role} onClick={() => setZoom(`${base}/${page.file}`)}>
+                      <img className="paper" src={`${base}/${page.file}`} alt={label} /><figcaption>{label}</figcaption></figure>
+                  ) : null;
+                })}
+                {chapter && (
+                  <figure className="ebook">
+                    <iframe title={`${theme.name} ebook`} src={`${base}/epub/${chapter}`} />
+                    <figcaption>Ebook</figcaption></figure>)}
+                {theme.render.wrap && (
+                  <figure className="wide" onClick={() => setZoom(`${base}/${theme.render!.wrap}`)}>
+                    <img src={`${base}/${theme.render.wrap}`} alt="print wrap" /><figcaption>Print wrap</figcaption></figure>)}
+              </div>
+            )}
+          </section>
+        );
+      })}
+      {zoom && <div className="zoom" onClick={() => setZoom("")}><img src={zoom} alt="" /></div>}
+      {catalogue.data && (
+        <>
+          <h2>Publishers</h2>
+          <p className="muted">What a publisher or printer asks of a cover: the sizes come from here and from the book's
+            trim, never from the theme. A book may bring its own in <code>publishers/&lt;name&gt;.yaml</code>.</p>
+          {catalogue.data.publishers.map((p) => (
+            <div key={p.name} className={`gate ${p.in_use ? "approved" : ""}`}>
+              <p><strong>{p.title}</strong> <code>{p.name}</code> <span className="muted">{p.source}</span>
+                {p.in_use && <span className="badge">used by this book</span>}</p>
+              <p className="muted">bleed {p.bleed}″ · spine per page {Object.entries(p.spine_per_page).map(([k, v]) => `${k} ${v}″`).join(", ")}
+                {" "}· spine text from {p.spine_text_pages} pages · barcode {p.barcode.join(" × ")}″ · ebook cover {p.ebook_pixels.join(" × ")} px · {p.dpi} dpi</p>
             </div>
           ))}
-          {!data.templates.some((t) => t.kind === kind) && <p className="muted">None.</p>}
-          {!data.editions[kind] && <p className="muted">This book declares no {kind} edition.</p>}
-        </section>
-      ))}
-      <h2>Publishers</h2>
-      <p className="muted">What a publisher or printer asks of a cover: the sizes come from here and from the book's trim,
-        never from the template. A book may bring its own in <code>publishers/&lt;name&gt;.yaml</code>.</p>
-      {data.publishers.map((p) => (
-        <div key={p.name} className={`gate ${p.in_use ? "approved" : ""}`}>
-          <p><strong>{p.title}</strong> <code>{p.name}</code> <span className="muted">{p.source}</span>
-            {p.in_use && <span className="badge">used by this book</span>}</p>
-          <p className="muted">bleed {p.bleed}″ · spine per page {Object.entries(p.spine_per_page).map(([k, v]) => `${k} ${v}″`).join(", ")}
-            {" "}· spine text from {p.spine_text_pages} pages · barcode {p.barcode.join(" × ")}″ · ebook cover {p.ebook_pixels.join(" × ")} px · {p.dpi} dpi</p>
-        </div>
-      ))}
+        </>
+      )}
     </div>
   );
 }

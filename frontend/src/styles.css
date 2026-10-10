@@ -146,3 +146,19 @@ header nav .apart { width: 1px; height: 1.4em; background: #0002; }
   border-bottom: 1px solid #0001; font-size: .92em; }
 .stage-views a { color: var(--muted); text-transform: capitalize; }
 .stage-views a.active { color: var(--deep); font-weight: 600; }
+/* The gallery: a theme is a strip of pictures of the same text. */
+.gallery { max-width: none; }
+.theme { margin: 1.6em 0 2.4em; padding: 1em 1.2em 1.2em; background: white; border: 1px solid #0001; border-left: 4px solid #0002; }
+.theme.in-use { border-left-color: var(--good); }
+.theme-head { display: flex; justify-content: space-between; align-items: center; gap: 1em; }
+.theme-head h2 { margin: 0; }
+.strip { display: flex; gap: 1em; overflow-x: auto; padding: .8em 0 .4em; align-items: flex-start; }
+.strip figure { margin: 0; flex: 0 0 auto; cursor: zoom-in; }
+.strip figure img, .strip figure iframe { display: block; height: 380px; border: 1px solid #0002; background: white; }
+.strip figure img.paper { box-shadow: 0 1px 6px #0002; }
+.strip figure.ebook { cursor: default; }
+.strip figure.ebook iframe { width: 250px; border-radius: 10px; border: 6px solid #23282d; }
+.strip figcaption { font-size: .78em; color: var(--muted); margin-top: .4em; text-align: center; }
+.zoom { position: fixed; inset: 0; background: #000c; display: flex; align-items: center; justify-content: center;
+  z-index: 50; cursor: zoom-out; }
+.zoom img { max-height: 94vh; max-width: 94vw; background: white; }

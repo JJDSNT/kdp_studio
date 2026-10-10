@@ -6,6 +6,12 @@ form a catalogue (`kdp templates`): built-in ones ship in
 `src/kdp_studio/templates/<kind>/<name>/`, and a book may add or override one in
 `<book>/templates/<kind>/<name>/`.
 
+A **theme** is a name the catalogue holds in more than one medium —
+`print/folio`, `ebook/folio`, `cover/folio` — so a book changes its whole look
+with `kdp theme <book> <name>`. Built in: `nocturne`, `folio`, `signal`. The
+control room shows each one applied to the same specimen text
+(`src/kdp_studio/specimen/`); a new template appears there by existing.
+
 The renderers emit *semantic* markup: "a concept callout", "a prompt with a QR
 code". The template decides what that looks like. The contract below is all a
 template must implement.
@@ -29,7 +35,9 @@ colors: {ink: "12202B", …}   # a book may override them under design.colors
 needs_bleed: true      # ink to the edge on some pages
 ```
 
-A trim a template does not list is refused, never guessed.
+A trim a template does not list is refused, never guessed. Colours are named
+by role, not by hue: `cold` is the accent of the narrative and `warm` the
+accent of exercises, `deep` the heads, `shade` the ground of an exercise.
 
 ## Print contract (LaTeX)
 

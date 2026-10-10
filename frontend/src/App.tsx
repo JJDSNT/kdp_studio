@@ -98,7 +98,7 @@ export default function App() {
         {route.view === "translation" && <TranslationView book={data} language={language} onChanged={book.reload} />}
         {route.view === "jobs" && <JobsView language={language} />}
         {route.view === "reader" && <ReaderView language={language} />}
-        {route.view === "templates" && <TemplatesView />}
+        {route.view === "templates" && <TemplatesView language={language} onChanged={book.reload} />}
         {route.view === "library" && <LibraryView />}
         {route.view === "publish" && <PublishView book={data} language={language} />}
         {route.view === "plan" && <PlanView book={data} language={language} onChanged={book.reload} />}

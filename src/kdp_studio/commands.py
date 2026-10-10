@@ -21,7 +21,7 @@ from .state import Actor
 #: A new language and a first glossary are created, never overwritten; the
 #: assistant asks first all the same.
 AGENT_COMMANDS = {"open_gate", "propose_version", "build", "check", "start_job", "reorder", "add_section",
-                  "remove_section", "add_part", "write_intentions", "add_language", "write_glossary", "add_art"}
+                  "remove_section", "add_part", "write_intentions", "add_language", "write_glossary", "add_art", "set_theme"}
 
 
 def _open_gate(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
@@ -165,6 +165,12 @@ def _add_art(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
                    notes=p.get("notes", ""), provenance=p.get("provenance") or None)
 
 
+def _set_theme(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from .gallery import apply_theme
+
+    return apply_theme(book, p["theme"], actor=actor, reason=p.get("reason", ""))
+
+
 COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "open_gate": _open_gate,
     "decide_gate": _decide_gate,
@@ -186,6 +192,7 @@ COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "confirm_translation": _confirm_translation,
     "write_glossary": _write_glossary,
     "add_art": _add_art,
+    "set_theme": _set_theme,
 }
 
 

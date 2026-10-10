@@ -84,13 +84,10 @@ Later (noted 2026-10-04, at the author's request — not now):
   components into per-language catalogues, starting with en and pt-BR). The
   interface language is independent of the book's language.
 
-- **A gallery of themes** (the author, 2026-10-10: the Templates view, a
-  list of names and descriptions, was not what he had in mind). Every template
-  of the catalogue applied to the same sample text — a chapter opening, a
-  callout, an exercise, a prompt, a part opening, in print and as an ebook,
-  with the cover — shown side by side as pictures, so a design is chosen by
-  looking, and applied to the book from there. It needs more than one theme to
-  be worth browsing: new templates come with it.
+- **A gallery of themes** — *delivered (2026-10-10, ADR 0016):* Nocturne,
+  Folio and Signal applied to the same specimen text and shown as pictures,
+  with "use this theme". Remaining: a theme previewed on the author's own
+  chapter, more themes and trims.
 
 - **An OPDS catalogue.** The built ebooks served over OPDS (from `kdp serve`,
   over the library it already knows — ADR 0014 — or a small server of its own), so the author reads each new build on a

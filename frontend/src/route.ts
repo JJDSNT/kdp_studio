@@ -27,7 +27,7 @@ export const STAGES: { id: string; label: string; views: View[] }[] = [
 ];
 
 export const VIEW_LABELS: Partial<Record<View, string>> = {
-  book: "Chapters", plan: "Plan", documents: "Documents", editions: "Editions & cover", proofs: "Print pages",
+  book: "Chapters", plan: "Plan", templates: "Themes", documents: "Documents", editions: "Editions & cover", proofs: "Print pages",
   reader: "Ebook reader", publish: "Readiness",
 };
 

@@ -90,15 +90,18 @@ control room with the assistant, and it can be translated section by section.
   what comes back; ComfyUI and Qwen Image Edit on RunPod. Tested with scripted
   endpoints only — no real job has been sent.
 
+- Themes and the gallery (ADR 0016): three themes across print, ebook and
+  cover — Nocturne, Folio, Signal — rendered over a lorem ipsum specimen and
+  shown side by side in the control room; `set_theme` / `kdp theme` takes one.
+
 ## Next action
 
 On *A Era dos Agentes* itself, the author's acts: `kdp language add … en`,
 read the glossary, read one translated chapter, then the rest; and the cover
 art — configure a provider (`kdp art providers`), register the present cover
 as `lettering: baked`, and repaint it without its words, or generate a new
-one. In the tool: the gallery of themes the author asked for (roadmap,
-later — it needs a second template), then the companion (`kdp companion`),
-then NILC-Metrix and spaCy and the rest of milestone 3.
+one. In the tool: the companion (`kdp companion`), then NILC-Metrix and spaCy
+and the rest of milestone 3.
 
 ## Risks and gaps
 

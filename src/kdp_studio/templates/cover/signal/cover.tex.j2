@@ -1,0 +1,101 @@
+((= Signal — cover template. One page: the ebook front, or the print wrap
+     (back, spine, front) laid out left to right. Coordinates are inches from
+     the lower-left corner of the sheet, given ready as `at.<place>`; `s`
+     scales type with the trim width.
+     Every word comes from the book; the art carries none. =))
+\documentclass{article}
+\usepackage[paperwidth=((( sheet.width )))in, paperheight=((( sheet.height )))in, margin=0pt]{geometry}
+\usepackage{polyglossia}
+\setmainlanguage[variant=((( labels.babel_variant )))]{((( labels.babel )))}
+\usepackage{xcolor}
+((* for name, value in colors.items() *))
+\definecolor{((( name|replace('_', '') )))}{HTML}{((( value )))}
+((* endfor *))
+\usepackage{fontspec}
+\setmainfont{TeX Gyre Termes}[Ligatures=TeX]
+\newfontfamily\displayfont{TeX Gyre Heros}[Ligatures=TeX]
+% Letter spacing through the font, never with spaces.
+\newfontfamily\spacedfont{TeX Gyre Heros}[Ligatures=TeX, LetterSpace=12, UprightFont=*-Bold]
+\usepackage{graphicx}
+\usepackage{adjustbox}
+\usepackage{tikz}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\frenchspacing
+
+\newcommand{\size}[2]{\fontsize{#1}{#2}\selectfont}
+
+((* if back *))
+% The back-cover text is measured: its height is written to the log, and the
+% cover check says whether it reaches the barcode.
+\newsavebox{\backbox}
+\savebox{\backbox}{\begin{minipage}[t]{((( back.width )))in}\raggedright\color{cream}
+((* if tagline *))
+  {\spacedfont\size{((( (8.5 * s)|round(2) )))}{((( (12 * s)|round(2) )))}\color{cold}\MakeUppercase{((( tagline|latex )))}\par}
+  \vspace{((( (0.22 * s)|round(3) )))in}
+((* endif *))
+  {\size{((( (10.6 * s)|round(2) )))}{((( (15.2 * s)|round(2) )))}\setlength{\parskip}{((( (0.11 * s)|round(3) )))in}((( back.text )))\par}
+((* if back.about *))
+  \vspace{((( (0.2 * s)|round(3) )))in}
+  {\color{cold}\rule{((( (0.55 * s)|round(3) )))in}{0.8pt}\par}
+  \vspace{((( (0.1 * s)|round(3) )))in}
+  {\size{((( (9 * s)|round(2) )))}{((( (13 * s)|round(2) )))}\color{grey}\setlength{\parskip}{((( (0.08 * s)|round(3) )))in}((( back.about )))\par}
+((* endif *))
+\end{minipage}}
+\typeout{KDP-COVER back-text-height=\the\dimexpr\ht\backbox+\dp\backbox\relax}
+((* endif *))
+
+\begin{document}%
+\begin{tikzpicture}[x=1in, y=1in, inner sep=0pt, outer sep=0pt]
+  \useasboundingbox (0,0) rectangle ((( at.corner )));
+  \fill[night] (0,0) rectangle ((( at.corner )));
+((* if art *))
+  \node[anchor=south west] at ((( at.art )))
+    {\includegraphics[width=((( front.art_width )))in, height=((( front.art_height )))in]{((( art )))}};
+((* endif *))
+
+  % ------------------------------------------------------------ front
+  \node[anchor=north] at ((( at.author )))
+    {\spacedfont\size{((( (13 * s)|round(2) )))}{((( (16 * s)|round(2) )))}\color{cream}\MakeUppercase{((( author|latex )))}};
+  \node[anchor=north] at ((( at.title )))
+    {\begin{minipage}[t]{((( front.text_width )))in}\centering
+((* for line in title_lines *))
+((* if loop.last *))
+      \adjustbox{max width=((( front.text_width )))in, max totalheight=((( (1.12 * s)|round(3) )))in}{\displayfont\bfseries\size{220}{220}\color{cold}\MakeUppercase{((( line|latex )))}}\par
+((* else *))
+      \adjustbox{max width=((( (front.text_width * 0.86)|round(3) )))in, max totalheight=((( (0.66 * s)|round(3) )))in}{\displayfont\bfseries\size{160}{160}\color{cream}\MakeUppercase{((( line|latex )))}}\par
+      \vspace{((( (0.1 * s)|round(3) )))in}
+((* endif *))
+((* endfor *))
+((* if subtitle *))
+      \vspace{((( (0.2 * s)|round(3) )))in}
+      {\displayfont\size{((( (16.5 * s)|round(2) )))}{((( (21 * s)|round(2) )))}\color{cream}((( subtitle|latex )))\par}
+((* endif *))
+((* if tagline *))
+      \vspace{((( (0.26 * s)|round(3) )))in}
+      {\color{cold}\rule{((( (0.9 * s)|round(3) )))in}{((( (5 * s)|round(2) )))pt}\par}
+      \vspace{((( (0.16 * s)|round(3) )))in}
+      {\spacedfont\size{((( (9.6 * s)|round(2) )))}{((( (13 * s)|round(2) )))}\color{cold}\MakeUppercase{((( tagline|latex )))}\par}
+((* endif *))
+    \end{minipage}};
+((* if line *))
+  \node[anchor=south west] at ((( at.line )))
+    {\begin{minipage}[b]{((( (front.text_width * 0.6)|round(3) )))in}\raggedright
+      \displayfont\size{((( (11 * s)|round(2) )))}{((( (15.5 * s)|round(2) )))}\color{cream}((( line|latex )))
+    \end{minipage}};
+((* endif *))
+
+((* if spine and spine.text *))
+  % ------------------------------------------------------------ spine
+  \node[rotate=-90] at ((( at.spine )))
+    {\adjustbox{max width=((( spine.length )))in, max totalheight=((( spine.band )))in}{%
+      \spacedfont\size{11}{11}\color{cream}\MakeUppercase{((( title|latex )))}%
+      \hspace{2.2em}\color{cold}\MakeUppercase{((( author|latex )))}}};
+((* endif *))
+
+((* if back *))
+  % ------------------------------------------------------------- back
+  \node[anchor=north west] at ((( at.back ))) {\usebox{\backbox}};
+((* endif *))
+\end{tikzpicture}%
+\end{document}

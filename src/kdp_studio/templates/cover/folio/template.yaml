@@ -1,0 +1,22 @@
+name: folio
+kind: cover
+title: Folio
+description: >
+  The cover of the Folio family: a paper ground, the title in spaced serif
+  capitals with its last line in burgundy, a fine vertical rule. Made for a
+  typographic cover; with art, the paper is laid over it where the words sit.
+origin: Drawn for KDP Studio's catalogue (2026), after the classic text page.
+engine: lualatex
+fonts: [TeX Gyre Schola]
+# `night` is the ground, `cream` the words on it, `cold` the accent.
+colors:
+  night: "F4EFE6"
+  cream: "1C1A17"
+  cold: "8C2F39"
+  warm: "B08D57"
+  grey: "6F6A63"
+# The ground laid over the art so the words stay readable, as (distance from
+# the top, opacity) pairs; baked into the picture.
+scrim: [[0.0, 0.96], [0.36, 0.90], [0.56, 0.25], [0.66, 0.0], [0.80, 0.0], [1.0, 0.85]]
+edge_fade: 0.10
+margin: 0.55

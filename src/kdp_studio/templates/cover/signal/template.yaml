@@ -1,0 +1,22 @@
+name: signal
+kind: cover
+title: Signal
+description: >
+  The cover of the Signal family: a black ground, the title in a bold sans
+  with its last line in signal red, a short heavy rule. One design gives the
+  ebook cover and the print wrap.
+origin: Drawn for KDP Studio's catalogue (2026), after the technical manual.
+engine: lualatex
+fonts: [TeX Gyre Termes, TeX Gyre Heros]
+# `night` is the ground, `cream` the words on it, `cold` the accent.
+colors:
+  night: "111111"
+  cream: "FFFFFF"
+  cold: "E4572E"
+  warm: "2456A6"
+  grey: "A9AEB6"
+# The ground laid over the art so the words stay readable, as (distance from
+# the top, opacity) pairs; baked into the picture.
+scrim: [[0.0, 0.95], [0.32, 0.86], [0.52, 0.30], [0.64, 0.0], [0.78, 0.0], [1.0, 0.82]]
+edge_fade: 0.10
+margin: 0.55

@@ -1,0 +1,35 @@
+name: signal
+kind: print
+title: Signal
+description: >
+  A technical page that says where you are: a bold sans for everything that
+  orients — labels, heads, the rule above each chapter — and a compact serif
+  for reading. Part openings in the accent colour from edge to edge; exercises
+  under a blue bar.
+origin: Drawn for KDP Studio's catalogue (2026), after the technical manual.
+engine: lualatex
+fonts: [TeX Gyre Termes, TeX Gyre Heros, DejaVu Sans Mono]
+# The text block and margins for each trim this template has been laid out
+# for. A trim not listed here is refused rather than guessed.
+trims:
+  6x9:
+    paper: [6in, 9in]
+    typeblock: [4.05in, 7.05in]
+    spine_margin: 0.98in
+    top_margin: 0.86in
+# The palette, by role: `cold` is the accent of the narrative, `warm` the
+# accent of exercises. A book may override any under `design.colors`.
+colors:
+  ink: "111111"
+  night: "111111"
+  deep: "111111"
+  cold: "E4572E"
+  cold_dark: "B83C17"
+  warm: "2456A6"
+  warm_dark: "1A3F7A"
+  shade: "EEF2F8"
+  shade_light: "F6F8FB"
+  grey: "666B73"
+  cream: "FFFFFF"
+  rule: "D5D9DF"
+needs_bleed: true

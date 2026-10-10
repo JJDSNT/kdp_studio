@@ -14,6 +14,7 @@ export default defineConfig({
       "/ebook.css": "http://127.0.0.1:8765",
       "/epub": "http://127.0.0.1:8765",
       "/covers": "http://127.0.0.1:8765",
+      "/gallery": "http://127.0.0.1:8765",
     },
   },
 });

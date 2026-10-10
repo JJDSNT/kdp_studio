@@ -1,0 +1,35 @@
+name: folio
+kind: print
+title: Folio
+description: >
+  A quiet literary page: one serif family, everything on the centre line,
+  hierarchy by italics, spaced capitals and white space. A single burgundy
+  accent; no dark grounds and no ink to the edge, so it prints the same with
+  or without bleed.
+origin: Drawn for KDP Studio's catalogue (2026), after the classic text page.
+engine: lualatex
+fonts: [TeX Gyre Schola, DejaVu Sans Mono]
+# The text block and margins for each trim this template has been laid out
+# for. A trim not listed here is refused rather than guessed.
+trims:
+  6x9:
+    paper: [6in, 9in]
+    typeblock: [4.05in, 7.05in]
+    spine_margin: 0.98in
+    top_margin: 0.86in
+# The palette, by role: `cold` is the accent of the narrative, `warm` the
+# accent of exercises. A book may override any under `design.colors`.
+colors:
+  ink: "1C1A17"
+  night: "2B1216"
+  deep: "2A2522"
+  cold: "8C2F39"
+  cold_dark: "6E222B"
+  warm: "B08D57"
+  warm_dark: "7A5C2E"
+  shade: "F4EFE6"
+  shade_light: "FAF7F1"
+  grey: "6F6A63"
+  cream: "FBF8F2"
+  rule: "D9D1C3"
+needs_bleed: false

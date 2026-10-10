@@ -36,6 +36,7 @@ The check says so, with the measured value beside the requirement.
 | `kdp doctor` | what works here, and how to fix what does not |
 | `kdp status <book>` | structure, words, editions and gates at a glance |
 | `kdp templates` | the edition template catalogue |
+| `kdp theme <book> [name]` | the themes (Nocturne, Folio, Signal…), or take one for every edition it covers |
 | `kdp build <book>` | the print interior and the ebook, for every language |
 | `kdp check <book>` | measured verdicts against KDP and EPUB requirements |
 | `kdp gate open/approve/changes/reject` | human gates, recorded in the book |

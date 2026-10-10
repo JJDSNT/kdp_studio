@@ -141,6 +141,14 @@ export interface Catalogue {
   overrides: Record<string, string>;
 }
 
+export interface Theme {
+  name: string; title: string; source: string; in_use: boolean; used_by: string[];
+  kinds: Record<string, { description: string; source: string; fonts: string[]; colors: Record<string, string>; origin: string }>;
+  render: null | {
+    key: string; pages: { file: string; role: string }[]; cover: string; wrap: string; ebook: string[];
+  };
+}
+
 export interface EpubSpine {
   file: string; built_at: number; cover: string; spine: { href: string; title: string }[];
 }
@@ -181,4 +189,11 @@ export function runCommand<T = Record<string, unknown>>(command: string, payload
 export function openBook(path: string): Promise<{ book: string; path: string }> {
   return fetch("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) })
     .then((r) => json<{ book: string; path: string }>(r));
+}
+
+/** Render a theme over the specimen: a cache, not a change to any book. */
+export function renderTheme(theme: string, language: string): Promise<unknown> {
+  return fetch("/api/gallery/build", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ theme, language }),
+  }).then((r) => json<unknown>(r));
 }

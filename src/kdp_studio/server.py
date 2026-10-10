@@ -112,6 +112,23 @@ class Studio:
         return {"templates": templates, "publishers": profiles, "editions": book.editions,
                 "overrides": (book.manifest.get("design") or {}).get("colors") or {}}
 
+    def gallery(self, language: str) -> list[dict[str, Any]]:
+        """Every theme, with its render over the specimen when there is one, and what this book uses."""
+
+        from . import gallery
+
+        book = self.book
+        used = gallery.in_use(book)
+        out = []
+        for theme in gallery.themes(book.root):
+            render = gallery.built(theme["name"], language, book.root)
+            out.append({**theme, "render": render,
+                        "used_by": sorted(kind for kind, name in used.items() if name == theme["name"]),
+                        "in_use": bool(used) and all(used.get(kind) == theme["name"] for kind in used
+                                                     if kind in theme["kinds"]) and any(
+                                                         kind in theme["kinds"] for kind in used)})
+        return out
+
     # ------------------------------------------------------------ the ebook, read
 
     def _epub(self, language: str) -> Path:
@@ -385,6 +402,33 @@ def create_app(root: Path | Studio, *, copilot_url: str = "", assistant_reason: 
     @app.get("/api/document")
     def document(path: str):
         return studio.document(path)
+
+    @app.get("/api/gallery")
+    def gallery_list(lang: str):
+        return studio.gallery(lang)
+
+    @app.post("/api/gallery/build")
+    async def gallery_build(request: Request):
+        # A render is a cache, not a change to any book: no command, no record.
+        from . import gallery
+
+        body = await request.json()
+        if not isinstance(body, dict) or not body.get("theme") or not body.get("language"):
+            raise ValidationError("A render needs a theme and a language")
+        return gallery.build(str(body["theme"]), str(body["language"]), studio.root)
+
+    @app.get("/gallery/{key}/epub/{name:path}")
+    def gallery_epub(key: str, name: str):
+        from . import gallery
+
+        data, kind = gallery.epub_file(key, name)
+        return Response(data, media_type=kind)
+
+    @app.get("/gallery/{key}/{name:path}")
+    def gallery_file(key: str, name: str):
+        from . import gallery
+
+        return FileResponse(gallery.file(key, name))
 
     @app.get("/api/templates")
     def templates():

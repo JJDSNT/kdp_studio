@@ -206,3 +206,57 @@ def test_paid_work_is_not_sent_twice(tmp_path, configured):
     with pytest.raises(ProviderError, match="different pending request"):
         run_job("e", {"prompt": "new"}, state_file=state, transport=endpoint)
     assert endpoint.sent == []
+
+
+# --------------------------------------------------------------- themes
+
+def test_a_theme_is_a_name_across_media_and_the_book_takes_it_by_one_command(sample):
+    from kdp_studio import gallery
+    from kdp_studio.commands import dispatch
+
+    found = {t["name"]: t for t in gallery.themes(sample)}
+    assert {"nocturne", "folio", "signal"} <= set(found)
+    assert set(found["folio"]["kinds"]) == {"print", "ebook", "cover"}
+    before = (sample / "book.yaml").read_text()
+    result = dispatch(load_book(sample), "set_theme", {"theme": "folio", "reason": "quieter"}, AUTHOR)
+    assert result["changed"] == ["print", "ebook", "cover"]
+    assert (sample / "book.yaml").read_text() == before.replace("template: nocturne", "template: folio")
+    assert gallery.in_use(load_book(sample)) == {"print": "folio", "ebook": "folio", "cover": "folio"}
+    assert dispatch(load_book(sample), "set_theme", {"theme": "folio"}, AUTHOR)["changed"] == []
+    with pytest.raises(Exception, match="No theme named"):
+        dispatch(load_book(sample), "set_theme", {"theme": "nope"}, AUTHOR)
+
+
+def test_a_theme_is_set_in_a_book_whose_editions_are_written_as_a_block(tmp_path, sample):
+    from kdp_studio.gallery import apply_theme
+
+    manifest = sample / "book.yaml"
+    text = manifest.read_text()
+    start = text.index("editions:")
+    end = text.index("exercises:")
+    manifest.write_text(text[:start] + "editions:\n  print:\n    template: nocturne\n    trim: 6x9\n    paper: cream\n"
+                        "  ebook:\n    template: nocturne\n" + text[end:])
+    result = apply_theme(load_book(sample), "signal", actor=AUTHOR)
+    assert result["changed"] == ["print", "ebook"] and "    trim: 6x9\n" in manifest.read_text()
+    assert manifest.read_text().count("template: signal") == 2
+
+
+@needs_tex
+def test_every_theme_renders_over_the_specimen(tmp_path, monkeypatch):
+    from PIL import Image
+
+    from kdp_studio import gallery
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    for theme in ("nocturne", "folio", "signal"):
+        assert gallery.built(theme, "pt-BR") is None
+        render = gallery.build(theme, "pt-BR")
+        roles = [p["role"] for p in render["pages"] if p["role"]]
+        assert roles == ["contents", "part", "chapter", "callouts", "exercise"], theme
+        folder = gallery.cache_dir() / render["key"]
+        assert Image.open(folder / render["cover"]).size == (1600, 2560) and (folder / "wrap.png").is_file()
+        assert len(render["ebook"]) == 4 and gallery.built(theme, "pt-BR") == render
+        page, kind = gallery.epub_file(render["key"], render["ebook"][-1])
+        assert kind == "application/xhtml+xml" and b"Exercitium breve" in page
+    with pytest.raises(Exception, match="No gallery file"):
+        gallery.file(render["key"], "../../outside")

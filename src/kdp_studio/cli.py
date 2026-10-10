@@ -444,6 +444,25 @@ def cmd_art(args) -> int:
     return 0
 
 
+def cmd_theme(args) -> int:
+    from . import gallery
+    from .commands import dispatch
+
+    book = load_book(args.book)
+    if args.theme:
+        result = dispatch(book, "set_theme", {"theme": args.theme, "reason": args.reason or ""}, _actor())
+        print(f"  {result['theme']}: " + (", ".join(result["changed"]) or "already in use")
+              + (f"   (no {', '.join(result['left'])} in this theme: left as it was)" if result["left"] else ""))
+        return 0
+    used = gallery.in_use(book)
+    for theme in gallery.themes(book.root):
+        mine = [kind for kind, name in used.items() if name == theme["name"]]
+        print(f"  {theme['name']:12} {'/'.join(sorted(theme['kinds'])):18} {theme['source']:9}"
+              + (f"  used for {', '.join(mine)}" if mine else ""))
+    print(f"  see them: kdp serve {args.book} — Produce, Themes")
+    return 0
+
+
 def cmd_new(args) -> int:
     from .structure import slug
 
@@ -550,6 +569,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--into", help="the part to append the section to")
     p.add_argument("--reason", "-m", required=True)
     p.set_defaults(func=cmd_move)
+
+    p = sub.add_parser("theme", help="the book's design: list the themes, or take one for every edition it covers")
+    p.add_argument("book")
+    p.add_argument("theme", nargs="?")
+    p.add_argument("--reason", "-m")
+    p.set_defaults(func=cmd_theme)
 
     p = sub.add_parser("art", help="the book's pictures (cover art, illustrations), each with how it was made")
     p.add_argument("action", choices=["list", "add", "generate", "providers"])

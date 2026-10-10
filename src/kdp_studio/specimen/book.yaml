@@ -1,0 +1,17 @@
+# The specimen: one text every theme of the gallery is applied to, so designs
+# are compared on the same words. Its language is set when it is built.
+schema: 1
+id: specimen
+author: Auctor Ignotus
+source_language: text
+languages: [text]
+contents:
+  - 00-praefatio
+  - part: 1
+    sections: [01-lorem-ipsum, 02-exercitium]
+editions:
+  print: {template: nocturne, trim: 6x9, paper: white, bleed: false}
+  ebook: {template: nocturne}
+  cover: {template: nocturne}
+exercises:
+  url: "https://example.org/{language}/{id}"
