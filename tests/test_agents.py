@@ -181,6 +181,7 @@ def test_a_held_job_can_still_be_answered_after_the_runtime_restarts(sample, tmp
     assert job["state"] == "waiting"
     # The runtime stops: the flow it held in memory is gone, the job and its checkpoint are on disk.
     jobs.HELD.clear()
+    monkeypatch.setattr(jobs, "FLOW_KINDS", dict(jobs.FLOW_KINDS))  # as a fresh process finds them: by importing
     jobs.reconcile(book)
     assert jobs.get_job(book, job["id"])["state"] == "waiting"
     job = jobs.answer(book, job["id"], "critique", wait=True)

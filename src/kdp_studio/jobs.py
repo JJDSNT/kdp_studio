@@ -81,7 +81,9 @@ def get_job(book: Book, job_id: str) -> dict[str, Any]:
 
 
 def reconcile(book: Book) -> None:
-    """A job left running by a runtime that stopped did not finish."""
+    """A job left running by a runtime that stopped did not finish; one that was held can still be answered."""
+
+    from . import agents, art  # noqa: F401 - the kinds on the flow must be known to tell which waits survive
 
     with _lock:
         jobs = _read(book)
