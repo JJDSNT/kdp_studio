@@ -50,9 +50,15 @@ is how *A Era dos Agentes* started, and it cost dearly.
    against its source and goes stale when the source changes. Remaining:
    register rules for English in the style catalogue, a chapter gate per
    translated language.
-9. **Cover** — ebook cover and the print wrap cover computed from the frozen
-   page count (spine), with cover templates in the catalogue; art and
-   typography as separate steps.
+9. **Cover and illustrations** — KDP Studio's own structure for them (the
+   author's direction, 2026-10-10: similar to Cine Toaster's, not a dependency
+   on it). Art and typography are separate steps: a generative model makes the
+   art *without* lettering, and every word on the cover — title, subtitle,
+   author, spine, back-cover copy, barcode area — is set by code from
+   `meta.yaml`, with the book's fonts, because models misspell. Ebook cover
+   (1600 × 2560) and the print wrap cover computed from the frozen page count
+   (spine), per language, with cover templates in the catalogue; illustrations
+   as book records (prompt, model, source file, where used).
 10. **Ingestion, diagnosis and mapping** (modes B and C) — any existing
     material, catalogued and mapped (keep, revise, rewrite, move, discard,
     preserve) against the intention; mode C at 100% fidelity.
@@ -75,6 +81,11 @@ Later (noted 2026-10-04, at the author's request — not now):
   with the person choosing the interface language (strings out of the
   components into per-language catalogues, starting with en and pt-BR). The
   interface language is independent of the book's language.
+
+- **An OPDS catalogue.** The built ebooks served over OPDS (from `kdp serve`
+  or a small server of its own), so the author reads each new build on a
+  reader or phone without downloading files by hand. One feed per book,
+  an entry per language, updated at each build.
 
 Housekeeping: LanguageTool 6.8 (2026-05-05) is out; the pin is 6.6.
 
