@@ -74,7 +74,8 @@ def key(theme: str, language: str, book_root: Path | None = None, ink: str = "co
     folders = [_specimen()] + [catalog.get(kind, theme, book_root).path for kind in KINDS
                                if any(t.kind == kind and t.name == theme for t in catalog.catalog(book_root))]
     for folder in folders:
-        for path in sorted(p for p in folder.rglob("*") if p.is_file()):
+        # design.json is the designer's memory of a theme, not part of how it looks.
+        for path in sorted(p for p in folder.rglob("*") if p.is_file() and p.name != "design.json"):
             hasher.update(str(path.relative_to(folder)).encode() + b"\0" + path.read_bytes())
     return f"{theme}-{language}-{ink}-{hasher.hexdigest()[:12]}"
 

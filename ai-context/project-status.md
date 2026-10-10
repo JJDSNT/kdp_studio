@@ -101,6 +101,10 @@ control room with the assistant, and it can be translated section by section.
   from references, recording the licence of what it looked at, and the theme
   joins the gallery only if the specimen builds with it.
 
+- The critic (ADR 0018): an agent shown a theme's rendered pages judges
+  character and craft; one look after a theme is drawn, then the author
+  decides whether the designer answers it. Themes revised and removed.
+
 ## Next action
 
 On *A Era dos Agentes* itself, the author's acts: `kdp language add … en`,

@@ -30,9 +30,21 @@ class Model(Protocol):
 
     def available(self) -> str: ...
 
-    def ask(self, system: str, prompt: str, schema: dict[str, Any], *, web: bool = False) -> dict[str, Any]:
-        """Answer in the schema's shape. With `web`, the model may search and open pages."""
+    def ask(self, system: str, prompt: str, schema: dict[str, Any], *, web: bool = False,
+            images: tuple = ()) -> dict[str, Any]:
+        """Answer in the schema's shape. With `web`, the model may search and open pages; `images`
+        are pictures (paths) it is shown with the prompt -- shown, never a file it may open itself."""
         ...
+
+
+def _picture(path) -> dict[str, Any]:
+    import base64
+    import mimetypes
+    from pathlib import Path
+
+    kind = mimetypes.guess_type(str(path))[0] or "image/png"
+    return {"type": "image", "source": {"type": "base64", "media_type": kind,
+                                        "data": base64.b64encode(Path(path).read_bytes()).decode()}}
 
 
 class ClaudeCli:
@@ -45,24 +57,43 @@ class ClaudeCli:
     def available(self) -> str:
         return "" if shutil.which(self.executable) else f"{self.executable} is not on PATH (install Claude Code)"
 
-    def ask(self, system: str, prompt: str, schema: dict[str, Any], *, web: bool = False) -> dict[str, Any]:
+    def ask(self, system: str, prompt: str, schema: dict[str, Any], *, web: bool = False,
+            images: tuple = ()) -> dict[str, Any]:
         reason = self.available()
         if reason:
             raise ModelUnavailable(reason)
         # Only reading the web is ever granted: no file, shell or edit tool.
         tools = ["--tools", "WebSearch", "WebFetch", "--allowedTools", "WebSearch", "WebFetch"] if web \
             else ["--tools", ""]
+        command = [self.executable, "-p", *tools, "--no-session-persistence", "--setting-sources", "",
+                   "--system-prompt", system, "--json-schema", json.dumps(schema)]
+        if images:
+            # Pictures travel inside the message: the model is shown them, and is given no way to open a file.
+            command += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
+            sent = json.dumps({"type": "user", "message": {"role": "user", "content": [
+                {"type": "text", "text": prompt}, *[_picture(path) for path in images]]}}) + "\n"
+        else:
+            command += ["--output-format", "json"]
+            sent = prompt
         try:
-            completed = subprocess.run(
-                [self.executable, "-p", "--output-format", "json", *tools, "--no-session-persistence",
-                 "--setting-sources", "", "--system-prompt", system, "--json-schema", json.dumps(schema)],
-                input=prompt, capture_output=True, text=True, timeout=self.timeout * (3 if web else 1),
-            )
+            completed = subprocess.run(command, input=sent, capture_output=True, text=True,
+                                       timeout=self.timeout * (3 if web or images else 1))
         except subprocess.TimeoutExpired as error:
             raise ModelUnavailable(f"The model took longer than {self.timeout:.0f} s") from error
         if completed.returncode:
             raise ModelUnavailable(f"The model CLI failed: {completed.stderr.strip()[:300]}")
-        answer = json.loads(completed.stdout)
+        if images:
+            events = []
+            for line in completed.stdout.splitlines():
+                try:
+                    events.append(json.loads(line))
+                except ValueError:
+                    continue
+            answer = next((e for e in reversed(events) if isinstance(e, dict) and e.get("type") == "result"), None)
+            if answer is None:
+                raise ModelUnavailable("The model CLI gave no result")
+        else:
+            answer = json.loads(completed.stdout)
         if answer.get("is_error"):
             raise ModelUnavailable(str(answer.get("result") or "The model answered with an error")[:300])
         return answer.get("structured_output") or json.loads(answer.get("result") or "{}")
@@ -101,7 +132,8 @@ class ClaudeApi:
             return "the anthropic SDK is not installed (uv sync --extra agents)"
         return ""
 
-    def ask(self, system: str, prompt: str, schema: dict[str, Any], *, web: bool = False) -> dict[str, Any]:
+    def ask(self, system: str, prompt: str, schema: dict[str, Any], *, web: bool = False,
+            images: tuple = ()) -> dict[str, Any]:
         reason = self.available()
         if reason:
             raise ModelUnavailable(reason)
@@ -111,7 +143,9 @@ class ClaudeApi:
         try:
             with client.beta.messages.stream(
                 model=self.model, max_tokens=64000, system=system,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": [{"type": "text", "text": prompt},
+                                                       *[_picture(path) for path in images]]
+                           if images else prompt}],
                 output_config={"effort": self.effort,
                                "format": {"type": "json_schema", "schema": _closed(schema)}},
                 betas=[self.FALLBACK_BETA], fallbacks="default",

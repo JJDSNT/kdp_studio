@@ -368,3 +368,65 @@ def test_a_theme_that_runs_code_or_names_a_missing_font_is_never_catalogued(samp
             design_theme(load_book(sample), "almanac", "A field guide.", model=model, attempts=2)
         assert len(model.asked) == 2 and "did not build" in model.asked[1]["prompt"]
         assert not (catalog.user_root() / "print" / "almanac").exists()
+
+
+class Eye:
+    """A critic that answers from a script and remembers what it was shown."""
+
+    name = "eye"
+
+    def __init__(self, *verdicts):
+        self.verdicts, self.seen = list(verdicts), []
+
+    def available(self):
+        return ""
+
+    def ask(self, system, prompt, schema, *, web=False, images=()):
+        self.seen.append({"prompt": prompt, "images": [p.name for p in images]})
+        verdict = self.verdicts.pop(0)
+        problems = [] if verdict == "accept" else [
+            {"where": "a chapter opening", "what": "the label is too faint", "why": "it vanishes in black ink",
+             "severity": "defect", "fix": "set the label in cold_dark"},
+            {"where": "the cover", "what": "the rule is timid", "why": "it reads as an accident",
+             "severity": "taste", "fix": "make it longer"}]
+        return {"overall": "Competent, and nobody's.", "character": "A default.", "answers_the_brief": "In part.",
+                "strengths": ["the centre line holds"], "problems": problems, "verdict": verdict}
+
+
+@needs_tex
+def test_a_critic_looks_at_the_pages_and_the_designer_answers_it(sample, tmp_path, monkeypatch):
+    from kdp_studio import gallery
+    from kdp_studio.agents import critic
+    from kdp_studio.agents.designer import design_theme, remove_theme, revise_theme
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    book = load_book(sample)
+    model, eye = Drawer("almanac"), Eye("revise", "accept")
+    result = design_theme(book, "almanac", "A field guide: calm, green.", model=model, critic=eye, rounds=1)
+    # The critic was shown pictures — the cover and pages, then pages in black ink — never a file to open.
+    assert eye.seen[0]["images"][0] == "cover.jpg" and len(eye.seen[0]["images"]) == 7
+    assert "in black ink" in eye.seen[0]["prompt"] and "A field guide" in eye.seen[0]["prompt"]
+    # Its criticism went back to the designer, defects first, and the new drawing was looked at too.
+    assert len(model.asked) == 2 and "[defect] a chapter opening: the label is too faint" in model.asked[1]["prompt"]
+    assert "You already drew this theme" in model.asked[1]["prompt"] and model.asked[1]["web"] is False
+    assert [c["verdict"] for c in result["critiques"]] == ["revise", "accept"] and result["drawings"] == 2
+    assert critic.latest("almanac")["verdict"] == "accept" and len(critic.critiques("almanac")) == 2
+
+    # The author asks for a change in their own words; a revision that does not build leaves the theme as it was.
+    before = (gallery.catalog.user_root() / "print" / "almanac" / "book.tex.j2").read_text()
+    with pytest.raises(ValidationError, match="stays as it was"):
+        revise_theme(book, "almanac", "larger title", model=Drawer("almanac", {"parts": "\\directlua{x}"}))
+    assert (gallery.catalog.user_root() / "print" / "almanac" / "book.tex.j2").read_text() == before
+    again = Drawer("almanac")
+    revise_theme(book, "almanac", "larger title", model=again)
+    assert "larger title" in again.asked[0]["prompt"]
+    with pytest.raises(ValidationError, match="not a theme the designer drew"):
+        revise_theme(book, "folio", "x", model=again)
+    # By default the work stops after one look: answering the critic is the author's call, not the designer's.
+    quiet, once = Drawer("almanac"), Eye("revise")
+    seen = revise_theme(book, "almanac", "smaller title", model=quiet, critic=once, look=True)
+    assert len(quiet.asked) == 1 and len(once.seen) == 1 and seen["critiques"][0]["verdict"] == "revise"
+    assert remove_theme("almanac")["removed"] == ["print", "ebook", "cover"]
+    assert "almanac" not in {t["name"] for t in gallery.themes(sample)}
+    with pytest.raises(ValidationError, match="cannot be removed"):
+        remove_theme("nocturne")

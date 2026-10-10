@@ -89,6 +89,10 @@ PROPOSALS = {
                     "brief: what the book is and how its page should feel, `subject` = the existing theme to "
                     "start from, `text` = a web address to look at as an external reference, if the author gave "
                     "one). It is built over the specimen text and, only if it builds, joins the gallery",
+    "critique_theme": "have the critic look at a theme's rendered pages (`title` = the theme) and judge them as a "
+                      "book designer would: character, hierarchy, what fails in black ink, defects",
+    "revise_theme": "have the designer draw one of the author's themes again (`title` = the theme; `instruction` = "
+                    "what to change, or empty to answer the critic's last criticism)",
     "generate_art": "have a picture made for the book by an image provider — paid work, so say what it is for "
                     "(`title` = a short id for the picture, `instruction` = what it shows, in English, with no "
                     "words in it: lettering is set by the cover template; `subject` = the id of an existing "
@@ -124,7 +128,10 @@ SYSTEM = (
     "works from references: internal ones (the themes that exist) and external ones (a page the author points "
     "at, such as a template gallery) — from an external one it takes the design, records the address and its "
     "licence, and copies code only when the licence allows. What it draws is catalogued in the gallery beside "
-    "the others; nothing changes in the book until the author takes a theme. "
+    "the others; nothing changes in the book until the author takes a theme. A critic — another agent, shown "
+    "the pages themselves — judges a theme with a designer's eye; its criticism is advice, shown in the gallery, "
+    "and the designer can answer it (`revise_theme`). When the author asks what you think of a theme, do not "
+    "improvise an opinion from its description: propose `critique_theme`. "
     "Another language: add it, draft the glossary and let the author read it, translate ONE chapter and let "
     "the author read it in that language, and only then the rest; what the translation report measures (prompt "
     "ids, numbers, URLs, code, glossary terms) is a finding for the author to read, and whether it reads well "
@@ -330,6 +337,14 @@ def build(model: Model, studio: Studio, checkpointer=None):
             payload = {"kind": "design_theme", "payload": {"name": p["title"], "brief": p["instruction"],
                                                            "based_on": p["subject"] or "nocturne",
                                                            "reference": p["text"], "language": p["language"]}}
+        elif p["action"] == "critique_theme":
+            question = f"Pedir ao crítico que olhe as páginas do tema {p['title']} e diga o que acha?"
+            payload = {"kind": "critique_theme", "payload": {"theme": p["title"], "language": p["language"]}}
+        elif p["action"] == "revise_theme":
+            question = (f"Pedir ao designer que refaça o tema {p['title']}"
+                        + (f": “{p['instruction']}”" if p["instruction"] else " respondendo à última crítica") + "?")
+            payload = {"kind": "revise_theme", "payload": {"theme": p["title"], "instruction": p["instruction"],
+                                                           "language": p["language"]}}
         elif p["action"] == "generate_art":
             from .. import art
 
@@ -355,7 +370,8 @@ def build(model: Model, studio: Studio, checkpointer=None):
         if not (isinstance(answer, dict) and answer.get("approved")):
             return {"messages": [AIMessage(content="Certo, não fiz nada.")], "proposal": {}}
         jobs_ = ("revise_voice", "revise_section", "research", "plan_book", "write_section", "add_language",
-                 "propose_glossary", "translate_section", "translate_book", "generate_art", "design_theme")
+                 "propose_glossary", "translate_section", "translate_book", "generate_art", "design_theme",
+                 "critique_theme", "revise_theme")
         command = "start_job" if p["action"] in jobs_ else p["action"]
         try:
             result = dispatch(studio.book, command, payload, AGENT)
@@ -398,7 +414,8 @@ def build(model: Model, studio: Studio, checkpointer=None):
         if p["action"] in jobs_:
             who = {"revise_voice": "revisor de voz", "revise_section": "revisor", "research": "pesquisador",
                    "plan_book": "arquiteto", "write_section": "redator",
-                   "generate_art": "pedido de imagem", "design_theme": "designer"}.get(p["action"], "tradutor")
+                   "generate_art": "pedido de imagem", "design_theme": "designer",
+                   "revise_theme": "designer", "critique_theme": "crítico"}.get(p["action"], "tradutor")
             return {"messages": [AIMessage(content=f"O {who} começou ({result['id']}). O resultado aparece "
                                                    "em Tarefas quando ficar pronto.")],
                     "proposal": {}, "navigate": {"view": "jobs", "language": p["language"], "section": "",

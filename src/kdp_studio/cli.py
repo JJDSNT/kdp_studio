@@ -449,6 +449,41 @@ def cmd_theme(args) -> int:
     from .commands import dispatch
 
     book = load_book(args.book)
+    if args.remove:
+        from .agents.designer import remove_theme
+
+        print(f"  {args.theme}: out of your catalogue ({', '.join(remove_theme(args.theme or '')['removed'])})")
+        return 0
+    if args.critique or args.revise is not None:
+        from . import jobs
+
+        if not args.theme:
+            print("error: name the theme", file=sys.stderr)
+            return 2
+        if args.revise is not None:
+            job = jobs.start(book, "revise_theme", {"theme": args.theme, "instruction": args.revise,
+                                                    "look": args.critique}, _actor(), wait=True)
+        else:
+            job = jobs.start(book, "critique_theme", {"theme": args.theme}, _actor(), wait=True)
+        if job["state"] != "done":
+            print(f"error: {job['error']}", file=sys.stderr)
+            return 1
+        result = job["result"]
+        seen = result if "problems" in result else None
+        if seen is None:
+            print(f"  {result['summary']}")
+            from .agents.critic import latest
+
+            seen = latest(args.theme) if args.critique else None
+        if seen:
+            print(f"  {seen['verdict'].upper()} — {seen['overall']}")
+            print(f"  character: {seen['character']}")
+            for problem in seen["problems"]:
+                print(f"    [{problem['severity']}] {problem['where']}: {problem['what']}\n"
+                      f"        fix: {problem['fix']}")
+            for strength in seen["strengths"]:
+                print(f"    keep: {strength}")
+        return 0
     if args.design:
         from . import jobs
 
@@ -457,7 +492,8 @@ def cmd_theme(args) -> int:
                   file=sys.stderr)
             return 2
         job = jobs.start(book, "design_theme", {"name": args.theme, "brief": args.brief, "based_on": args.based_on,
-                                                "reference": args.reference or ""}, _actor(), wait=True)
+                                                "reference": args.reference or "",
+                                                "look": not args.no_critic}, _actor(), wait=True)
         if job["state"] != "done":
             print(f"error: {job['error']}", file=sys.stderr)
             return 1
@@ -466,6 +502,8 @@ def cmd_theme(args) -> int:
         print(f"  {result['description']}")
         for reference in result["references"]:
             print(f"  looked at {reference['url']} ({reference['license'] or 'no licence stated'}): {reference['taken']}")
+        for seen in result["critiques"]:
+            print(f"  critic: {seen['verdict']} ({seen['defects']} defect(s)) — {seen['overall']}")
         if result["overfull"]:
             print(f"  ⚠ {result['overfull']} overfull box(es) on the specimen")
         if result["notes"]:
@@ -600,6 +638,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--brief", help="--design: what the book is and how it should feel")
     p.add_argument("--based-on", default="nocturne", help="--design: the theme to start from")
     p.add_argument("--reference", help="--design: a web page to look at (its licence is recorded)")
+    p.add_argument("--no-critic", action="store_true", help="--design: do not have the critic look at it")
+    p.add_argument("--critique", action="store_true", help="have the critic look at the theme's pages and judge them")
+    p.add_argument("--revise", nargs="?", const="", metavar="INSTRUCTION",
+                   help="have the designer draw the theme again: as you say, or as its last criticism says")
+    p.add_argument("--remove", action="store_true", help="take a theme out of your own catalogue")
     p.set_defaults(func=cmd_theme)
 
     p = sub.add_parser("art", help="the book's pictures (cover art, illustrations), each with how it was made")

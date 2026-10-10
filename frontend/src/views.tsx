@@ -700,7 +700,7 @@ export function JobsView({ language }: { language: string }) {
               {Array.isArray(job.result.translated) && (job.result.translated as { section: string; version: string }[]).map((t) => (
                 <span key={t.version}> <a href={href({ view: "version", language: job.payload.language || language,
                   section: t.section, version: t.version })}>{t.section} →</a></span>))}
-              {job.kind === "design_theme" ? <> <a href={href({ view: "templates", language })}>Gallery →</a></> : null}
+              {["design_theme", "revise_theme", "critique_theme"].includes(job.kind) ? <> <a href={href({ view: "templates", language })}>Gallery →</a></> : null}
               {job.kind.startsWith("translate") || job.kind === "add_language" || job.kind === "propose_glossary"
                 ? <> <a href={href({ view: "translation", language: job.payload.language || language })}>Translation →</a></> : null}</p>
           )}
@@ -956,6 +956,23 @@ export function TemplatesView({ language, onChanged }: { language: string; onCha
     }
   }
 
+  async function job(kind: string, payload: Record<string, unknown>) {
+    try {
+      await runCommand("start_job", { kind, payload });
+      go({ view: "jobs", language });
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+
+  function revise(theme: string, criticised: boolean) {
+    const instruction = window.prompt(criticised
+      ? `What should the designer change in “${theme}”? Leave empty to answer the critic's last criticism.`
+      : `What should the designer change in “${theme}”?`, "");
+    if (instruction === null || (!criticised && !instruction.trim())) return;
+    job("revise_theme", { theme, instruction, language });
+  }
+
   async function use(theme: string) {
     const reason = window.prompt(`Take the theme “${theme}” for this book? Say why, for the book's history.`, "");
     if (reason === null) return;
@@ -1022,6 +1039,35 @@ export function TemplatesView({ language, onChanged }: { language: string; onCha
             {Object.keys(print.colors).length > 0 && (
               <p className="swatches">{Object.entries(print.colors).map(([name, value]) => (
                 <span key={name} title={`${name} #${value}`} style={{ background: `#${value}` }} />))}</p>
+            )}
+            <div className="actions">
+              <button className="secondary" onClick={() => job("critique_theme", { theme: theme.name, language })}>
+                {theme.critique ? "Ask the critic again" : "Ask the critic"}</button>
+              {theme.revisable && (
+                <button className="secondary" onClick={() => revise(theme.name, !!theme.critique)}>Revise…</button>)}
+            </div>
+            {theme.critique && (
+              <details className="critique" open={theme.critique.verdict !== "accept"}>
+                <summary><span className={`state ${theme.critique.verdict === "accept" ? "approved" : "waiting"}`}>
+                  critic: {theme.critique.verdict}</span> {theme.critique.defects} defect(s),{" "}
+                  {theme.critique.problems.length} remark(s) · {when(theme.critique.at)}</summary>
+                <p>{theme.critique.overall}</p>
+                <p className="muted"><strong>Character.</strong> {theme.critique.character}</p>
+                {theme.critique.answers_the_brief && (
+                  <p className="muted"><strong>The brief.</strong> {theme.critique.answers_the_brief}</p>)}
+                <table className="findings">
+                  <tbody>
+                    {theme.critique.problems.map((p, i) => (
+                      <tr key={i} className={p.severity === "defect" ? "fail" : p.severity === "weakness" ? "warn" : ""}>
+                        <td className="verdict">{p.severity}</td>
+                        <td>{p.where}</td>
+                        <td>{p.what} <span className="muted">{p.why}</span><div className="muted">→ {p.fix}</div></td>
+                      </tr>))}
+                  </tbody>
+                </table>
+                {theme.critique.strengths.length > 0 && (
+                  <p className="muted"><strong>Keep.</strong> {theme.critique.strengths.join(" · ")}</p>)}
+              </details>
             )}
             {!theme.render ? (
               <p className="muted">{rendering === theme.name ? "Rendering over the sample text…" : "Waiting to be rendered…"}</p>

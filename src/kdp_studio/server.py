@@ -116,13 +116,15 @@ class Studio:
         """Every theme, with its render over the specimen when there is one, and what this book uses."""
 
         from . import gallery
+        from .agents import critic
 
         book = self.book
         used = gallery.in_use(book)
         out = []
         for theme in gallery.themes(book.root):
             render = gallery.built(theme["name"], language, book.root, ink)
-            out.append({**theme, "render": render,
+            out.append({**theme, "render": render, "critique": critic.latest(theme["name"]),
+                        "revisable": (catalog.user_root() / "print" / theme["name"] / "design.json").is_file(),
                         "used_by": sorted(kind for kind, name in used.items() if name == theme["name"]),
                         "in_use": bool(used) and all(used.get(kind) == theme["name"] for kind in used
                                                      if kind in theme["kinds"]) and any(
