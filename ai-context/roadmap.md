@@ -54,9 +54,10 @@ is how *A Era dos Agentes* started, and it cost dearly.
    0013):* art as records without lettering, every word set by a cover
    template from `meta.yaml`, sizes from a publisher profile and the book's
    trim and page count, the ebook cover and the print wrap from one design,
-   measured. Remaining: an image provider adapter that generates art and
-   writes its record (after Cine Toaster's providers); illustrations placed
-   in the text; case-bound wraps.
+   measured; and art providers (ADR 0015: ComfyUI and Qwen Image Edit on
+   RunPod, planned and priced before sent, lettering repainted out of an
+   existing picture). Remaining: a first real run; an enlarging provider for
+   300 dpi; an Art view; illustrations placed in the text; case-bound wraps.
 10. **Ingestion, diagnosis and mapping** (modes B and C) — any existing
     material (the first to try: the author's ODT book in
     `JJDSNT/pipeline-de-publicacao`, whose pandoc conversion and ordering of
@@ -82,6 +83,14 @@ Later (noted 2026-10-04, at the author's request — not now):
   with the person choosing the interface language (strings out of the
   components into per-language catalogues, starting with en and pt-BR). The
   interface language is independent of the book's language.
+
+- **A gallery of themes** (the author, 2026-10-10: the Templates view, a
+  list of names and descriptions, was not what he had in mind). Every template
+  of the catalogue applied to the same sample text — a chapter opening, a
+  callout, an exercise, a prompt, a part opening, in print and as an ebook,
+  with the cover — shown side by side as pictures, so a design is chosen by
+  looking, and applied to the book from there. It needs more than one theme to
+  be worth browsing: new templates come with it.
 
 - **An OPDS catalogue.** The built ebooks served over OPDS (from `kdp serve`,
   over the library it already knows — ADR 0014 — or a small server of its own), so the author reads each new build on a

@@ -83,6 +83,10 @@ PROPOSALS = {
                         "and never-translated names; written only when the book has no glossary.yaml",
     "translate_section": "start the translator on one section (`language` = the target, section; `instruction` "
                          "optional): an editorial adaptation as a candidate version, measured against the source",
+    "generate_art": "have a picture made for the book by an image provider — paid work, so say what it is for "
+                    "(`title` = a short id for the picture, `instruction` = what it shows, in English, with no "
+                    "words in it: lettering is set by the cover template; `subject` = the id of an existing "
+                    "picture to repaint without its lettering, when that is the request)",
     "translate_book": "start the translator on every untranslated or stale section of `language` (the target), "
                       "each as a candidate version; propose it only after the author has read and adopted a "
                       "first translated chapter and the glossary",
@@ -301,6 +305,24 @@ def build(model: Model, studio: Studio, checkpointer=None):
             if p["action"] == "translate_section":
                 job["section"] = p["section"]
             payload = {"kind": p["action"], "payload": job}
+        elif p["action"] == "generate_art":
+            from .. import art
+
+            job = {"id": p["title"], "prompt": p["instruction"], "derived_from": p["subject"],
+                   "remove_lettering": bool(p["subject"]), "purpose": "cover"}
+            try:
+                planned = art.plan(studio.book, job["id"], prompt=job["prompt"], derived_from=job["derived_from"],
+                                   remove_lettering=job["remove_lettering"])
+            except Exception as error:  # noqa: BLE001
+                return {"messages": [AIMessage(content=f"Não dá para pedir essa imagem: "
+                                                       f"{getattr(error, 'message', error)}")], "proposal": {}}
+            if planned["missing"]:
+                return {"messages": [AIMessage(content="O provedor de imagens não está configurado; falta: "
+                                                       + ", ".join(planned["missing"]) + ".")], "proposal": {}}
+            question = (f"Pedir a imagem art/{planned['id']} ao {planned['provider']} ({planned['width']} × "
+                        f"{planned['height']} px)? É trabalho pago: cerca de US$ {planned['estimate_usd']}. "
+                        f"Pedido: “{planned['prompt']}”")
+            payload = {"kind": "generate_art", "payload": {**job, "seed": planned["seed"]}}
         else:
             question = f"Abrir o portão {p['kind']}{' de ' + p['subject'] if p['subject'] else ''} para você decidir?"
             payload = {"kind": p["kind"], "subject": p["subject"]}
@@ -308,7 +330,7 @@ def build(model: Model, studio: Studio, checkpointer=None):
         if not (isinstance(answer, dict) and answer.get("approved")):
             return {"messages": [AIMessage(content="Certo, não fiz nada.")], "proposal": {}}
         jobs_ = ("revise_voice", "revise_section", "research", "plan_book", "write_section", "add_language",
-                 "propose_glossary", "translate_section", "translate_book")
+                 "propose_glossary", "translate_section", "translate_book", "generate_art")
         command = "start_job" if p["action"] in jobs_ else p["action"]
         try:
             result = dispatch(studio.book, command, payload, AGENT)
@@ -344,7 +366,8 @@ def build(model: Model, studio: Studio, checkpointer=None):
                                  "document": "intentions.md" if view == "documents" else "", "id": uuid.uuid4().hex[:8]}}
         if p["action"] in jobs_:
             who = {"revise_voice": "revisor de voz", "revise_section": "revisor", "research": "pesquisador",
-                   "plan_book": "arquiteto", "write_section": "redator"}.get(p["action"], "tradutor")
+                   "plan_book": "arquiteto", "write_section": "redator",
+                   "generate_art": "pedido de imagem"}.get(p["action"], "tradutor")
             return {"messages": [AIMessage(content=f"O {who} começou ({result['id']}). O resultado aparece "
                                                    "em Tarefas quando ficar pronto.")],
                     "proposal": {}, "navigate": {"view": "jobs", "language": p["language"], "section": "",

@@ -110,7 +110,7 @@ def kind(name: str, description: str):
 
 
 def start(book: Book, kind_name: str, payload: dict[str, Any], actor: Actor, *, wait: bool = False) -> dict[str, Any]:
-    from . import agents  # noqa: F401 - registers the agent job kinds
+    from . import agents, art  # noqa: F401 - register their job kinds
 
     if kind_name not in KINDS:
         raise ValidationError(f"Unknown job kind {kind_name!r}", kinds=sorted(KINDS))

@@ -43,13 +43,16 @@ def check_cover(book: Book, language: str, folder: Path, report: dict[str, Any])
     if art is None:
         findings.append(Finding("art", "Cover art", INFO, "none: a typographic cover", ""))
     else:
-        baked = art.get("lettering") == "baked"
+        declared = art.get("lettering") if art["recorded"] else "not recorded"
+        why = {"baked": "Words drawn by an image model cannot be corrected or translated, and the template sets "
+                        "them again.",
+               "unchecked": f"A model was asked for none: look at art/{art['id']}, then write `lettering: none` "
+                            "in its record.",
+               "not recorded": f"`kdp art add` records how art/{art['id']} was made."}
         findings.append(Finding(
-            "art-lettering", "No lettering in the art", WARN if baked or not art["recorded"] else PASS,
-            "baked in" if baked else "declared none" if art["recorded"] else "not recorded",
-            "none: every word is set by the template",
-            "Words drawn by an image model cannot be corrected or translated, and the template sets them again."
-            if baked else "" if art["recorded"] else f"`kdp art add` records how art/{art['id']} was made."))
+            "art-lettering", "No lettering in the art", PASS if declared == "none" else WARN,
+            {"none": "declared none", "baked": "baked in", "unchecked": "not looked at yet"}.get(declared, declared),
+            "none: every word is set by the template", why.get(declared, "")))
         used = report["ebook"]["art"]["pixels"]
         findings.append(Finding("art-ebook", "Art behind the ebook cover", PASS if used[0] >= wanted[0] else WARN,
                                 f"{used[0]} × {used[1]} px used", f"at least {wanted[0]} px wide",

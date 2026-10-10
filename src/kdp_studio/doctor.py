@@ -28,6 +28,8 @@ class Capability:
     detail: str = ""
     remedy: str = ""
     wired: bool = True
+    #: Nothing a book needs: its absence is not a gap.
+    optional: bool = False
 
 
 def _module(name: str) -> bool:
@@ -76,20 +78,28 @@ def capabilities() -> list[Capability]:
                    OK if shutil.which("claude") else MISSING,
                    remedy="install Claude Code, or set KDP_MODEL=claude-api with ANTHROPIC_API_KEY"),
     ]
+    from . import providers
+
+    for provider in providers.providers().values():
+        missing = provider.missing()
+        does = "made from words" if provider.mode == "generate" else "repainted"
+        caps.append(Capability(f"Art: {provider.id}", f"pictures {does} ({provider.model}); optional and paid",
+                               OK if not missing else MISSING, optional=True,
+                               remedy=f"set {', '.join(missing)} in the environment or in {providers.config_file()}"))
     return caps
 
 
 def report() -> str:
     lines = []
     for cap in capabilities():
-        mark = "ok     " if cap.status == OK else "missing"
+        mark = "ok     " if cap.status == OK else "not set" if cap.optional else "missing"
         line = f"  {mark}  {cap.name:16} {cap.enables}"
         if cap.detail:
             line += f"  ({cap.detail})"
         lines.append(line)
         if cap.status != OK and cap.remedy:
             lines.append(f"           -> {cap.remedy}")
-    missing = [c for c in capabilities() if c.status != OK]
+    missing = [c for c in capabilities() if c.status != OK and not c.optional]
     lines.append("")
     lines.append("Ready, with everything installed." if not missing else
                  f"{len(missing)} capability(ies) missing; each line above says how to add it.")

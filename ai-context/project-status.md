@@ -85,14 +85,20 @@ control room with the assistant, and it can be translated section by section.
   0014), shows the template catalogue and the publisher profiles, and reads
   the built ebook at a device's width.
 
+- Art providers (ADR 0015): `kdp art generate` plans a picture (prompt with
+  "no lettering", size, seed, estimate), sends it only on a yes, and records
+  what comes back; ComfyUI and Qwen Image Edit on RunPod. Tested with scripted
+  endpoints only — no real job has been sent.
+
 ## Next action
 
 On *A Era dos Agentes* itself, the author's acts: `kdp language add … en`,
-read the glossary, read one translated chapter, then the rest; and lettering-
-free cover art at 300 dpi, registered with `kdp art add`. In the tool: an
-image provider adapter (art generated and recorded), then the companion
-(`kdp companion`, with the `/en/` pages the QR codes point to); then
-NILC-Metrix and spaCy as engines and the rest of milestone 3.
+read the glossary, read one translated chapter, then the rest; and the cover
+art — configure a provider (`kdp art providers`), register the present cover
+as `lettering: baked`, and repaint it without its words, or generate a new
+one. In the tool: the gallery of themes the author asked for (roadmap,
+later — it needs a second template), then the companion (`kdp companion`),
+then NILC-Metrix and spaCy and the rest of milestone 3.
 
 ## Risks and gaps
 
@@ -104,8 +110,9 @@ NILC-Metrix and spaCy as engines and the rest of milestone 3.
   `/en/` addresses that do not exist until the companion is generated.
 - The book's only cover art has its words drawn in by a model and is 1024 ×
   1536; the cover template needs art without lettering, larger.
-- Art cannot be generated from inside KDP Studio yet, and "no lettering" is
-  declared, not detected.
+- Art generation has never run against a real endpoint from here, a generated
+  picture is about 167 dpi on a 6 × 9 cover, and "no lettering" is declared by
+  a person, not detected.
 - Translation checks cannot see a number written out in words, and the
   English style catalogue has few register rules.
 - The fact inventory's proper-name pattern is heuristic: it can over-report,

@@ -109,3 +109,100 @@ def test_one_design_gives_the_ebook_cover_and_the_wrap(sample, tmp_path):
     report.write_text(json.dumps(data))
     found = {f["id"]: f for f in run_checks(book, "en", "cover")["findings"]}
     assert found["wrap-pages"]["verdict"] == "fail"
+
+
+# ------------------------------------------------------------ providers
+
+class Endpoint:
+    """A RunPod endpoint that answers from a script and remembers what it was sent."""
+
+    def __init__(self, output, polls=("IN_PROGRESS",)):
+        self.output, self.polls, self.sent = output, list(polls), []
+
+    def __call__(self, path, body):
+        if body is not None:
+            self.sent.append(body["input"])
+            return {"id": "job-1", "status": "IN_QUEUE"}
+        if self.polls:
+            return {"status": self.polls.pop(0)}
+        return {"status": "COMPLETED", "delayTime": 2000, "executionTime": 30000, "output": self.output}
+
+
+def encoded(path):
+    import base64
+
+    return base64.b64encode(path.read_bytes()).decode()
+
+
+@pytest.fixture
+def configured(tmp_path, monkeypatch):
+    import kdp_studio.providers.runpod as runpod
+
+    workflow = tmp_path / "workflow.json"
+    workflow.write_text(json.dumps({
+        "3": {"class_type": "KSampler", "inputs": {"seed": 0}},
+        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 512}},
+        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": ""}},
+        "7": {"class_type": "CLIPTextEncode", "_meta": {"title": "Negative"}, "inputs": {"text": ""}}}))
+    for name, value in (("RUNPOD_API_KEY", "k"), ("KDP_COMFYUI_ENDPOINT_ID", "comfy"),
+                        ("KDP_COMFYUI_WORKFLOW", str(workflow)), ("RUNPOD_QWEN_ENDPOINT_ID", "qwen"),
+                        ("XDG_STATE_HOME", str(tmp_path / "state")), ("XDG_CONFIG_HOME", str(tmp_path / "config"))):
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(runpod, "POLL_SECONDS", 0)
+
+
+def test_a_request_is_planned_before_it_is_sent_and_says_what_is_missing(sample, monkeypatch, tmp_path):
+    for name in ("RUNPOD_API_KEY", "KDP_COMFYUI_ENDPOINT_ID", "KDP_COMFYUI_WORKFLOW"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    planned = art.plan(load_book(sample), "dawn", prompt="a planet's   edge at dawn", seed=3)
+    assert planned["provider"] == "comfyui" and (planned["width"], planned["height"]) == (1024, 1536)
+    assert planned["prompt"].startswith("a planet's edge at dawn No text, no letters")
+    assert planned["missing"] == ["RUNPOD_API_KEY", "KDP_COMFYUI_ENDPOINT_ID", "KDP_COMFYUI_WORKFLOW"]
+    assert planned["print_dpi"] == 167 and planned["estimate_usd"] > 0
+    with pytest.raises(ValidationError, match="needs a prompt"):
+        art.plan(load_book(sample), "dawn")
+    with pytest.raises(ValidationError, match="repaints a picture"):
+        art.plan(load_book(sample), "dawn", prompt="x", provider="qwen-edit")
+
+
+def test_a_generated_picture_enters_the_book_with_how_it_was_made(sample, tmp_path, configured):
+    from kdp_studio.providers.comfyui import ComfyUi
+
+    book = load_book(sample)
+    endpoint = Endpoint({"images": [{"data": encoded(picture(tmp_path / "made.png", (1024, 1536)))}]})
+    planned = art.plan(book, "dawn", prompt="a planet's edge at dawn", seed=11)
+    found = art.generate(book, planned, actor=Actor("assistant", "agent"), provider=ComfyUi(endpoint))
+    graph = endpoint.sent[0]["workflow"]
+    assert graph["6"]["inputs"]["text"].endswith("no signature anywhere in the image.")
+    assert graph["7"]["inputs"]["text"].startswith("text, letters") and graph["3"]["inputs"]["seed"] == 11
+    assert graph["5"]["inputs"] == {"width": 1024, "height": 1536}
+    assert (found["seed"], found["provider"], found["lettering"]) == (11, "comfyui", "unchecked")
+    assert found["provenance"]["seconds"] == 32.0 and found["provenance"]["job"] == "job-1"
+    assert (sample / "art" / "dawn.png").is_file() and found["cost_usd"] > 0
+
+
+def test_lettering_is_repainted_out_of_a_picture_the_book_has(sample, tmp_path, configured):
+    from kdp_studio.providers.qwen_edit import QwenEdit
+
+    book = load_book(sample)
+    art.add(book, picture(tmp_path / "old.png", (1024, 1536)), "old-cover", actor=AUTHOR, purpose="cover",
+            lettering="baked")
+    endpoint = Endpoint({"image": encoded(picture(tmp_path / "clean.png", (1024, 1536)))})
+    planned = art.plan(book, "clean-cover", derived_from="old-cover", remove_lettering=True, seed=5)
+    assert planned["provider"] == "qwen-edit" and planned["prompt"].startswith("Remove every piece of text")
+    found = art.generate(book, planned, actor=AUTHOR, provider=QwenEdit(endpoint))
+    assert endpoint.sent[0]["seed"] == 5 and endpoint.sent[0]["image_base64"]
+    assert found["derived_from"] == "old-cover" and found["model"] == "qwen-image-edit"
+
+
+def test_paid_work_is_not_sent_twice(tmp_path, configured):
+    from kdp_studio.providers import ProviderError
+    from kdp_studio.providers.runpod import run_job
+
+    state = tmp_path / "x.job.json"
+    state.write_text(json.dumps({"endpoint": "e", "sha256": "another request", "status": "IN_QUEUE", "id": "j"}))
+    endpoint = Endpoint({"image": "x"})
+    with pytest.raises(ProviderError, match="different pending request"):
+        run_job("e", {"prompt": "new"}, state_file=state, transport=endpoint)
+    assert endpoint.sent == []

@@ -21,7 +21,7 @@ from .state import Actor
 #: A new language and a first glossary are created, never overwritten; the
 #: assistant asks first all the same.
 AGENT_COMMANDS = {"open_gate", "propose_version", "build", "check", "start_job", "reorder", "add_section",
-                  "remove_section", "add_part", "write_intentions", "add_language", "write_glossary"}
+                  "remove_section", "add_part", "write_intentions", "add_language", "write_glossary", "add_art"}
 
 
 def _open_gate(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
@@ -154,6 +154,17 @@ def _write_glossary(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, An
                           replace=bool(p.get("replace")))
 
 
+def _add_art(book: Book, actor: Actor, p: dict[str, Any]) -> dict[str, Any]:
+    from pathlib import Path
+
+    from . import art
+
+    return art.add(book, Path(p["file"]), p["id"], actor=actor, purpose=p.get("purpose", "illustration"),
+                   prompt=p.get("prompt", ""), model=p.get("model", ""), provider=p.get("provider", ""),
+                   seed=p.get("seed"), derived_from=p.get("derived_from", ""), lettering=p.get("lettering", "none"),
+                   notes=p.get("notes", ""), provenance=p.get("provenance") or None)
+
+
 COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "open_gate": _open_gate,
     "decide_gate": _decide_gate,
@@ -174,6 +185,7 @@ COMMANDS: dict[str, Callable[[Book, Actor, dict[str, Any]], dict[str, Any]]] = {
     "add_language": _add_language,
     "confirm_translation": _confirm_translation,
     "write_glossary": _write_glossary,
+    "add_art": _add_art,
 }
 
 

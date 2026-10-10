@@ -387,22 +387,59 @@ def cmd_translation(args) -> int:
 
 
 def cmd_art(args) -> int:
-    from . import art
+    from . import art, jobs, providers
+    from .commands import dispatch
 
+    if args.action == "providers":
+        print(f"  settings: the environment, or {providers.config_file()}")
+        for provider in providers.providers().values():
+            missing = provider.missing()
+            print(f"  {provider.id:11} {provider.mode:9} " + ("ready" if not missing else "missing: " + ", ".join(missing))
+                  + f"   about ${provider.estimate_usd()} a picture")
+        return 0
     book = load_book(args.book)
     if args.action == "add":
         if not args.file or not args.id:
             print("error: kdp art add <book> <file> --id <id>", file=sys.stderr)
             return 2
-        found = art.add(book, Path(args.file), args.id, actor=_actor(), purpose=args.purpose, prompt=args.prompt or "",
-                        model=args.model or "", provider=args.provider or "", seed=args.seed,
-                        derived_from=args.derived_from or "", lettering=args.lettering, notes=args.notes or "")
+        found = dispatch(book, "add_art", {
+            "file": args.file, "id": args.id, "purpose": args.purpose, "prompt": args.prompt or "",
+            "model": args.model or "", "provider": args.provider or "", "seed": args.seed,
+            "derived_from": getattr(args, "from") or "", "lettering": args.lettering, "notes": args.notes or ""},
+            _actor())
         print(f"  {found['id']}: {found['path']}  {found['width']} × {found['height']} px")
         return 0
+    if args.action == "generate":
+        if not args.id:
+            print("error: kdp art generate <book> --id <id> --prompt … [--from <id>]", file=sys.stderr)
+            return 2
+        size = tuple(int(v) for v in args.size.lower().split("x")) if args.size else None
+        payload = {"id": args.id, "prompt": args.prompt or "", "provider": args.provider or "",
+                   "purpose": args.purpose, "derived_from": getattr(args, "from") or "",
+                   "remove_lettering": args.remove_lettering, "seed": args.seed, "size": size}
+        planned = art.plan(book, args.id, prompt=payload["prompt"], provider=payload["provider"],
+                           purpose=args.purpose, derived_from=payload["derived_from"],
+                           remove_lettering=args.remove_lettering, seed=args.seed, size=size)
+        print(f"  {planned['id']}: {planned['provider']} ({planned['model']}), {planned['width']} × "
+              f"{planned['height']} px, seed {planned['seed']}"
+              + (f", from art/{planned['derived_from']}" if planned["derived_from"] else ""))
+        if planned.get("print_dpi"):
+            print(f"  on the printed cover: about {planned['print_dpi']} dpi")
+        print(f"  prompt: {planned['prompt']}")
+        print(f"  estimate: about ${planned['estimate_usd']}")
+        if planned["missing"]:
+            print("  not configured: " + ", ".join(planned["missing"]) + f"  ({providers.config_file()})")
+            return 2
+        if not args.yes:
+            print("  nothing was sent: this is paid work — run again with --yes to send it")
+            return 0
+        job = jobs.start(book, "generate_art", {**payload, "seed": planned["seed"]}, _actor(), wait=True)
+        print(f"  {job['result']['summary']}" if job["state"] == "done" else f"error: {job['error']}")
+        return 0 if job["state"] == "done" else 1
     for found in art.records(book):
         how = found.get("model") or ("recorded" if found["recorded"] else "not recorded")
         print(f"  {found['id']:24} {found.get('purpose', ''):13} {found['width']} × {found['height']} px  "
-              f"lettering {found.get('lettering', '?'):6} {how}"
+              f"lettering {found.get('lettering', '?'):10} {how}"
               + ("  ⚠ changed since it was recorded" if found["changed_since"] else ""))
     return 0
 
@@ -515,18 +552,21 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_move)
 
     p = sub.add_parser("art", help="the book's pictures (cover art, illustrations), each with how it was made")
-    p.add_argument("action", choices=["list", "add"])
-    p.add_argument("book")
+    p.add_argument("action", choices=["list", "add", "generate", "providers"])
+    p.add_argument("book", nargs="?", default=".")
     p.add_argument("file", nargs="?")
     p.add_argument("--id")
     p.add_argument("--purpose", choices=["cover", "illustration"], default="cover")
-    p.add_argument("--lettering", choices=["none", "baked"], default="none",
+    p.add_argument("--lettering", choices=["none", "baked", "unchecked"], default="none",
                    help="baked: the picture already carries words")
-    p.add_argument("--prompt")
+    p.add_argument("--prompt", help="what the picture shows; “no lettering” is always added")
     p.add_argument("--model")
-    p.add_argument("--provider")
+    p.add_argument("--provider", help="generate: comfyui (from words) or qwen-edit (repaint --from)")
     p.add_argument("--seed", type=int)
-    p.add_argument("--derived-from", help="the art id this picture was made from")
+    p.add_argument("--from", help="the art id this picture is made from")
+    p.add_argument("--remove-lettering", action="store_true", help="generate: repaint --from without its words")
+    p.add_argument("--size", help="generate: WIDTHxHEIGHT in pixels (default: the cover's proportion)")
+    p.add_argument("--yes", action="store_true", help="generate: send it (paid); without it the plan is only shown")
     p.add_argument("--notes")
     p.set_defaults(func=cmd_art)
 

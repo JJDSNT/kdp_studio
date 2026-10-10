@@ -154,7 +154,7 @@ art, an illustration — and `art/<id>.yaml` records how it was made:
 
 ```yaml
 purpose: cover            # cover | illustration
-lettering: none           # none | baked (the picture carries words)
+lettering: none           # none | baked (it carries words) | unchecked (a model was asked for none)
 prompt: a planet's edge at dawn, no text, no letters
 model: …                  # with provider and seed, when a model made it
 derived_from: …           # the art id it was made from
@@ -163,8 +163,11 @@ height: 2850
 digest: …
 ```
 
-`kdp art add` writes both; nothing is replaced, so another attempt is another
-id. Art for a cover carries no lettering: image models misspell, and words
+`kdp art add` writes both, and so does `kdp art generate`, which has a
+provider make the picture or repaint one the book has (`--from <id>
+--remove-lettering`): the request is shown with its estimate and sent only
+with `--yes`. Nothing is replaced, so another attempt is another id. A
+provider's keys and endpoints are never kept in a book (`kdp art providers`). Art for a cover carries no lettering: image models misspell, and words
 drawn into a picture cannot be corrected or translated. Every word is set by
 the cover template from `meta.yaml`, so one picture serves every language.
 

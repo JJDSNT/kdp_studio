@@ -47,6 +47,7 @@ The check says so, with the measured value beside the requirement.
 | `kdp new <dir> --title … --author … --idea …` | start a book from an idea |
 | `kdp build <book> --edition cover` | the ebook cover and the print wrap, sized from the trim, the page count and the publisher's profile |
 | `kdp art add/list <book>` | the book's pictures, each with how it was made |
+| `kdp art generate <book> --id … --prompt … [--from id --remove-lettering] [--yes]` | a picture made or repainted by a provider: planned and priced, sent only with `--yes` |
 | `kdp language add <book> <language>` | a second language: its `meta.yaml` translated and a stub per section |
 | `kdp glossary <book> <language>` | the book's bilingual glossary; drafted by the translator when it has none |
 | `kdp translate <book> <language> [section]` | the translator: one section, or every pending one, as candidate versions |
