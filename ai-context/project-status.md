@@ -94,6 +94,13 @@ control room with the assistant, and it can be translated section by section.
   cover — Nocturne, Folio, Signal — rendered over a lorem ipsum specimen and
   shown side by side in the control room; `set_theme` / `kdp theme` takes one.
 
+- Black ink, the person's catalogue and the designer (ADR 0017): the gallery
+  shows print (colour or black ink) and ebook (screen or e-ink);
+  `editions.print.ink: black` builds the interior in greys and the check
+  fails a page with colour; a designer agent draws a theme from a brief and
+  from references, recording the licence of what it looked at, and the theme
+  joins the gallery only if the specimen builds with it.
+
 ## Next action
 
 On *A Era dos Agentes* itself, the author's acts: `kdp language add … en`,

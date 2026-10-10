@@ -132,6 +132,23 @@ def _translation(studio: Studio, args: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _themes(studio: Studio, args: dict[str, Any]) -> str:
+    from .. import gallery
+
+    book = studio.book
+    used = gallery.in_use(book)
+    lines = ["The book uses: " + (", ".join(f"{kind} {name}" for kind, name in used.items()) or "no edition")
+             + f"; print ink: {(book.editions.get('print') or {}).get('ink', 'color')}."]
+    for theme in gallery.themes(book.root):
+        first = theme["kinds"].get("print") or next(iter(theme["kinds"].values()))
+        lines.append(f"- {theme['name']} ({theme['source']}; {', '.join(sorted(theme['kinds']))}): "
+                     f"{first['description']}"
+                     + (f" Drawn by the designer over {theme.get('based_on')}." if theme.get("designed_by") else "")
+                     + "".join(f" Looked at {r['url']} ({r['license'] or 'no licence stated'})."
+                               for r in theme.get("inspired_by") or []))
+    return "\n".join(lines)
+
+
 def _plans(studio: Studio, args: dict[str, Any]) -> str:
     import json as _json
 
@@ -159,6 +176,8 @@ READS: dict[str, tuple[str, str, Callable[[Studio, dict[str, Any]], str]]] = {
     "jobs": ("background jobs and their results", "", _jobs),
     "research": ("the research dossiers, or one of them", "path optional (research/<slug>.md)", _research),
     "plan": ("the latest plan the architect proposed", "", _plans),
+    "themes": ("the themes of the catalogue (built-in, the author's own, the book's), what each is, where the "
+               "designer looked, and which the book uses", "", _themes),
     "translation": ("a translated language against its source: each section's state (untranslated, translated, "
                     "stale, unrecorded) and what was measured", "language; section optional", _translation),
 }

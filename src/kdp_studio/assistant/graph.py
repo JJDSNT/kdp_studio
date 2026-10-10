@@ -83,6 +83,12 @@ PROPOSALS = {
                         "and never-translated names; written only when the book has no glossary.yaml",
     "translate_section": "start the translator on one section (`language` = the target, section; `instruction` "
                          "optional): an editorial adaptation as a candidate version, measured against the source",
+    "set_theme": "give the book a theme of the catalogue (`title` = the theme's name; needs `rationale`): every "
+                 "edition the theme covers takes it; the text is not touched",
+    "design_theme": "have the designer draw a NEW theme (`title` = a short lowercase name, `instruction` = the "
+                    "brief: what the book is and how its page should feel, `subject` = the existing theme to "
+                    "start from, `text` = a web address to look at as an external reference, if the author gave "
+                    "one). It is built over the specimen text and, only if it builds, joins the gallery",
     "generate_art": "have a picture made for the book by an image provider — paid work, so say what it is for "
                     "(`title` = a short id for the picture, `instruction` = what it shows, in English, with no "
                     "words in it: lettering is set by the cover template; `subject` = the id of an existing "
@@ -111,6 +117,14 @@ SYSTEM = (
     "The author works chapter by chapter and commands through you: to change text, start the reviser with a "
     "precise instruction rather than writing a version yourself. The voice is decided for the whole book (its "
     "voice guide), not per chapter. Chapter approval is the author's: you may say a chapter looks ready. "
+    "Design: a theme is one name for the print interior, the ebook and the cover; the gallery (`navigate` to "
+    "`templates`) shows every theme on the same sample text, in print (colour or black ink, which costs less to "
+    "print) and as an ebook. When the author wants another look, first see what the catalogue has (read "
+    "`themes`); then either propose `set_theme`, or `design_theme` with a brief in their words. The designer "
+    "works from references: internal ones (the themes that exist) and external ones (a page the author points "
+    "at, such as a template gallery) — from an external one it takes the design, records the address and its "
+    "licence, and copies code only when the licence allows. What it draws is catalogued in the gallery beside "
+    "the others; nothing changes in the book until the author takes a theme. "
     "Another language: add it, draft the glossary and let the author read it, translate ONE chapter and let "
     "the author read it in that language, and only then the rest; what the translation report measures (prompt "
     "ids, numbers, URLs, code, glossary terms) is a finding for the author to read, and whether it reads well "
@@ -305,6 +319,17 @@ def build(model: Model, studio: Studio, checkpointer=None):
             if p["action"] == "translate_section":
                 job["section"] = p["section"]
             payload = {"kind": p["action"], "payload": job}
+        elif p["action"] == "set_theme":
+            question = (f"Aplicar o tema {p['title']} ao livro? Muda só o nome do template de cada edição no "
+                        "book.yaml; o texto não é tocado.")
+            payload = {"theme": p["title"], "reason": p["rationale"]}
+        elif p["action"] == "design_theme":
+            question = (f"Pedir ao designer um tema novo, “{p['title']}”, a partir de {p['subject'] or 'nocturne'}"
+                        + (f", olhando {p['text']}" if p["text"] else "") + f"? Briefing: “{p['instruction']}”. "
+                        "Ele só entra na galeria se compilar sobre o texto de exemplo.")
+            payload = {"kind": "design_theme", "payload": {"name": p["title"], "brief": p["instruction"],
+                                                           "based_on": p["subject"] or "nocturne",
+                                                           "reference": p["text"], "language": p["language"]}}
         elif p["action"] == "generate_art":
             from .. import art
 
@@ -330,7 +355,7 @@ def build(model: Model, studio: Studio, checkpointer=None):
         if not (isinstance(answer, dict) and answer.get("approved")):
             return {"messages": [AIMessage(content="Certo, não fiz nada.")], "proposal": {}}
         jobs_ = ("revise_voice", "revise_section", "research", "plan_book", "write_section", "add_language",
-                 "propose_glossary", "translate_section", "translate_book", "generate_art")
+                 "propose_glossary", "translate_section", "translate_book", "generate_art", "design_theme")
         command = "start_job" if p["action"] in jobs_ else p["action"]
         try:
             result = dispatch(studio.book, command, payload, AGENT)
@@ -354,6 +379,12 @@ def build(model: Model, studio: Studio, checkpointer=None):
             return {"messages": [AIMessage(content=text)], "proposal": {},
                     "navigate": {"view": "book", "language": p["language"], "section": "", "version": "",
                                  "document": "", "id": uuid.uuid4().hex[:8]}}
+        if p["action"] == "set_theme":
+            return {"messages": [AIMessage(content=f"O livro agora usa o tema {p['title']} em "
+                                                   f"{', '.join(result['editions'])}. Reconstrua as edições para "
+                                                   "ver no seu texto.")],
+                    "proposal": {}, "navigate": {"view": "templates", "language": p["language"], "section": "",
+                                                 "version": "", "document": "", "id": uuid.uuid4().hex[:8]}}
         if p["action"] in ("add_section", "remove_section", "write_intentions"):
             done = {"add_section": f"Acrescentei {result.get('section', '')}: o redator pode escrevê-lo quando você "
                                    "quiser.",
@@ -367,7 +398,7 @@ def build(model: Model, studio: Studio, checkpointer=None):
         if p["action"] in jobs_:
             who = {"revise_voice": "revisor de voz", "revise_section": "revisor", "research": "pesquisador",
                    "plan_book": "arquiteto", "write_section": "redator",
-                   "generate_art": "pedido de imagem"}.get(p["action"], "tradutor")
+                   "generate_art": "pedido de imagem", "design_theme": "designer"}.get(p["action"], "tradutor")
             return {"messages": [AIMessage(content=f"O {who} começou ({result['id']}). O resultado aparece "
                                                    "em Tarefas quando ficar pronto.")],
                     "proposal": {}, "navigate": {"view": "jobs", "language": p["language"], "section": "",

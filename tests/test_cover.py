@@ -260,3 +260,111 @@ def test_every_theme_renders_over_the_specimen(tmp_path, monkeypatch):
         assert kind == "application/xhtml+xml" and b"Exercitium breve" in page
     with pytest.raises(Exception, match="No gallery file"):
         gallery.file(render["key"], "../../outside")
+
+
+# ------------------------------------------------- black ink, the designer
+
+def test_black_ink_turns_every_colour_into_a_grey(sample):
+    from kdp_studio import catalog
+    from kdp_studio.build import grey, print_colors
+
+    assert grey("FFFFFF") == "FFFFFF" and grey("000000") == "000000" and grey("32D9E2") == "B6B6B6"
+    template = catalog.get("print", "nocturne")
+    mono = print_colors(load_book(sample), template, "black")
+    assert all(value[0:2] == value[2:4] == value[4:6] for value in mono.values())
+    assert print_colors(load_book(sample), template, "color")["cold"] == "32D9E2"
+    with pytest.raises(ValidationError, match="Unknown ink"):
+        print_colors(load_book(sample), template, "sepia")
+
+
+@needs_tex
+def test_an_interior_declared_black_is_measured_for_colour(sample):
+    from kdp_studio.build import build_print
+    from kdp_studio.checks.kdp_print import check_print, colour_pages
+
+    coloured = build_print(load_book(sample), "en")
+    assert colour_pages(coloured.output)
+    found = {f.id: f for f in check_print(coloured.output, trim=(6, 9), bleed=True, paper="cream", ink="black")}
+    assert found["ink"].verdict == "fail"
+    black = build_print(load_book(sample), "en", ink="black")
+    assert colour_pages(black.output) == []
+    found = {f.id: f for f in check_print(black.output, trim=(6, 9), bleed=True, paper="cream", ink="black")}
+    assert found["ink"].verdict == "pass"
+
+
+class Drawer:
+    """A model that answers with a theme: Folio's blocks under another name, then whatever it is told to."""
+
+    name = "drawer"
+
+    def __init__(self, name, spoil=None):
+        from kdp_studio import catalog
+        from kdp_studio.agents.designer import base_blocks
+
+        blocks = base_blocks((catalog.get("print", "folio").path / "book.tex.j2").read_text())
+        parts = blocks["parts"].split("\\aliaspagestyle")[0].split("parts\n", 1)[1]
+        self.answer = {
+            "title": "Almanac", "description": "A quiet page for a field guide.",
+            "fonts": blocks["fonts"].split("fonts\n", 1)[1],
+            "parts": parts, "chapter_style": blocks["chapter_style"].replace("folio", name)
+            .replace("\\newcommand{\\kdpchapterlabel}{}\n", ""),
+            "section_head": blocks["section_head"], "needs_bleed": False,
+            "palette": dict(ink="111111", night="222222", deep="1A2B1A", cold="2E6B3A", cold_dark="1F4D28",
+                            warm="B5651D", warm_dark="7A4312", shade="F1F4EC", shade_light="F8FAF5", grey="667066",
+                            cream="FBFBF6", rule="D5DBCF"),
+            "css_extra": "h1 { text-align: center; }",
+            "cover_palette": dict(night="1F4D28", cream="FBFBF6", cold="E3C36A", warm="B5651D", grey="B9C2B4"),
+            "cover_display_font": "TeX Gyre Schola", "cover_text_font": "TeX Gyre Schola",
+            "references": [{"url": "https://example.org/a-template", "title": "A template", "license": "",
+                            "taken": "the centred chapter head; no code"}],
+            "notes": "ok"}
+        self.spoil, self.asked = spoil or {}, []
+
+    def available(self):
+        return ""
+
+    def ask(self, system, prompt, schema, *, web=False):
+        self.asked.append({"prompt": prompt, "web": web})
+        return {**self.answer, **self.spoil}
+
+
+@needs_tex
+def test_the_designer_s_theme_is_built_before_it_is_catalogued_and_travels_with_the_book(sample, tmp_path, monkeypatch):
+    from kdp_studio import catalog, gallery
+    from kdp_studio.agents.designer import design_theme
+    from kdp_studio.commands import dispatch
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    model = Drawer("almanac")
+    result = design_theme(load_book(sample), "almanac", "A field guide: calm, green, centred.", based_on="nocturne",
+                          reference="https://example.org/a-template", model=model)
+    assert model.asked[0]["web"] is True and "Installed font families" in model.asked[0]["prompt"]
+    assert result["attempts"] == 1 and result["references"][0]["license"] == ""
+    found = {t["name"]: t for t in gallery.themes(sample)}["almanac"]
+    assert found["source"] == "yours" and found["designed_by"] == "designer" and found["based_on"] == "nocturne"
+    assert found["inspired_by"][0]["taken"] == "the centred chapter head; no code"
+    assert catalog.get("print", "almanac").meta["colors"]["cold"] == "2E6B3A"
+    css = (catalog.get("ebook", "almanac").path / "style.css").read_text()
+    assert "#2E6B3A" in css and "#32D9E2" not in css and "h1 { text-align: center; }" in css
+    render = gallery.built("almanac", "en", sample)
+    assert [p["role"] for p in render["pages"] if p["role"]][:2] == ["contents", "part"]
+    # Taking it copies it into the book: a book builds from what it holds.
+    taken = dispatch(load_book(sample), "set_theme", {"theme": "almanac"}, AUTHOR)
+    assert taken["carried"] == ["templates/print/almanac", "templates/ebook/almanac", "templates/cover/almanac"]
+    assert catalog.get("print", "almanac", sample).source == "book"
+    with pytest.raises(ValidationError, match="nothing is replaced"):
+        design_theme(load_book(sample), "almanac", "again", model=model)
+
+
+def test_a_theme_that_runs_code_or_names_a_missing_font_is_never_catalogued(sample, tmp_path, monkeypatch):
+    from kdp_studio import catalog
+    from kdp_studio.agents.designer import design_theme
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    for spoil, why in (({"parts": "\\directlua{os.execute('true')}"}, "may not"),
+                       ({"cover_display_font": "A Font Nobody Has"}, "not installed")):
+        model = Drawer("almanac", spoil)
+        with pytest.raises(ValidationError, match=why):
+            design_theme(load_book(sample), "almanac", "A field guide.", model=model, attempts=2)
+        assert len(model.asked) == 2 and "did not build" in model.asked[1]["prompt"]
+        assert not (catalog.user_root() / "print" / "almanac").exists()

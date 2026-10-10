@@ -54,8 +54,29 @@ def _font_embedded(font) -> bool:
     return any(key in descriptor for key in ("/FontFile", "/FontFile2", "/FontFile3"))
 
 
+def colour_pages(pdf: Path) -> list[int]:
+    """Pages where anything is not a grey: rasterised small, each pixel's channels compared."""
+
+    import tempfile
+
+    from PIL import Image, ImageChops
+
+    found = []
+    with tempfile.TemporaryDirectory() as folder:
+        subprocess.run(["gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=png16m", "-r30",
+                        f"-sOutputFile={folder}/p%04d.png", str(pdf)], check=True, capture_output=True)
+        for number, path in enumerate(sorted(Path(folder).glob("p*.png")), start=1):
+            with Image.open(path) as image:
+                red, green, blue = image.convert("RGB").split()
+            spread = max(ImageChops.difference(red, green).getextrema()[1],
+                         ImageChops.difference(green, blue).getextrema()[1])
+            if spread > 14:
+                found.append(number)
+    return found
+
+
 def check_print(pdf: Path, *, trim: tuple[float, float], bleed: bool, paper: str = "white",
-                log: Path | None = None) -> list[Finding]:
+                log: Path | None = None, ink: str = "") -> list[Finding]:
     from pypdf import PdfReader
 
     reader = PdfReader(str(pdf))
@@ -107,6 +128,19 @@ def check_print(pdf: Path, *, trim: tuple[float, float], bleed: bool, paper: str
         under = len(re.findall(r"^Underfull \\[hv]box", text, re.M))
         findings.append(Finding("overfull", "Overfull boxes", PASS if not over else FAIL, str(over), "0"))
         findings.append(Finding("underfull", "Underfull boxes", PASS if not under else FAIL, str(under), "0"))
+    if shutil.which("gs"):
+        coloured = colour_pages(pdf)
+        listed = ", ".join(map(str, coloured[:12])) + (" …" if len(coloured) > 12 else "")
+        if ink == "black":
+            findings.append(Finding("ink", "Black ink only", PASS if not coloured else FAIL,
+                                    f"{len(coloured)} page(s) with colour" + (f" ({listed})" if coloured else ""),
+                                    "0: the edition is declared `ink: black`"))
+        else:
+            findings.append(Finding(
+                "ink", "Colour in the interior", INFO, f"{len(coloured)} of {count} page(s)" if coloured else "none",
+                "", "A black-and-white printing turns these to greys the design did not choose, and a colour "
+                    "printing costs more per page; `ink: black` under editions.print sets the greys on purpose."
+                if coloured else ""))
     findings.append(Finding("transparency", "Transparency flattened", NOT_CHECKED,
                             detail="not measured yet"))
     return findings

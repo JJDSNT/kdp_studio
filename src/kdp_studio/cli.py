@@ -449,6 +449,28 @@ def cmd_theme(args) -> int:
     from .commands import dispatch
 
     book = load_book(args.book)
+    if args.design:
+        from . import jobs
+
+        if not args.theme or not args.brief:
+            print("error: kdp theme <book> <new-name> --design --brief \"…\" [--based-on …] [--reference URL]",
+                  file=sys.stderr)
+            return 2
+        job = jobs.start(book, "design_theme", {"name": args.theme, "brief": args.brief, "based_on": args.based_on,
+                                                "reference": args.reference or ""}, _actor(), wait=True)
+        if job["state"] != "done":
+            print(f"error: {job['error']}", file=sys.stderr)
+            return 1
+        result = job["result"]
+        print(f"  {result['summary']}")
+        print(f"  {result['description']}")
+        for reference in result["references"]:
+            print(f"  looked at {reference['url']} ({reference['license'] or 'no licence stated'}): {reference['taken']}")
+        if result["overfull"]:
+            print(f"  ⚠ {result['overfull']} overfull box(es) on the specimen")
+        if result["notes"]:
+            print(f"  designer: {result['notes']}")
+        return 0
     if args.theme:
         result = dispatch(book, "set_theme", {"theme": args.theme, "reason": args.reason or ""}, _actor())
         print(f"  {result['theme']}: " + (", ".join(result["changed"]) or "already in use")
@@ -574,6 +596,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("book")
     p.add_argument("theme", nargs="?")
     p.add_argument("--reason", "-m")
+    p.add_argument("--design", action="store_true", help="have the designer draw a new theme with this name")
+    p.add_argument("--brief", help="--design: what the book is and how it should feel")
+    p.add_argument("--based-on", default="nocturne", help="--design: the theme to start from")
+    p.add_argument("--reference", help="--design: a web page to look at (its licence is recorded)")
     p.set_defaults(func=cmd_theme)
 
     p = sub.add_parser("art", help="the book's pictures (cover art, illustrations), each with how it was made")

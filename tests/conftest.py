@@ -18,3 +18,10 @@ def sample(tmp_path) -> Path:
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"], cwd=root,
                    check=True)
     return root
+
+
+@pytest.fixture(autouse=True)
+def own_catalogue(tmp_path, monkeypatch):
+    """Tests never see, or write into, the themes of the person running them."""
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))

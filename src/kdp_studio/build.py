@@ -48,6 +48,30 @@ def edition_settings(book: Book, edition: str) -> dict[str, Any]:
     return dict(settings)
 
 
+INKS = ("color", "black")
+
+
+def grey(color: str) -> str:
+    """The grey a colour prints as: its luminance, as a printer without colour would give it."""
+
+    red, green, blue = (int(color[i:i + 2], 16) for i in (0, 2, 4))
+    level = round(0.2126 * red + 0.7152 * green + 0.0722 * blue)
+    return f"{level:02X}" * 3
+
+
+def print_colors(book: Book, template: catalog.Template, ink: str) -> dict[str, str]:
+    """The palette of the interior. In black ink every colour is a grey: the template's own
+    (`mono:` in template.yaml, where a designer chose one), else the colour's luminance."""
+
+    if ink not in INKS:
+        raise ValidationError(f"Unknown ink {ink!r} for the print edition", allowed=list(INKS))
+    colors = {**(template.meta.get("colors") or {}), **((book.manifest.get("design") or {}).get("colors") or {})}
+    if ink == "color":
+        return colors
+    chosen = template.meta.get("mono") or {}
+    return {name: grey(str(chosen.get(name, value))) for name, value in colors.items()}
+
+
 def build_dir(book: Book, language: str, edition: str) -> Path:
     return book.root / "builds" / language / edition
 
@@ -95,7 +119,8 @@ def _latex_env(template_dir: Path) -> jinja2.Environment:
     return env
 
 
-def build_print(book: Book, language: str, *, bleed: bool | None = None, engine_runs: int = 2) -> BuildResult:
+def build_print(book: Book, language: str, *, bleed: bool | None = None, engine_runs: int = 2,
+                ink: str | None = None) -> BuildResult:
     settings = edition_settings(book, "print")
     template = catalog.get("print", settings["template"], book.root)
     trims = template.meta.get("trims") or {}
@@ -105,7 +130,8 @@ def build_print(book: Book, language: str, *, bleed: bool | None = None, engine_
                               trims=sorted(trims))
     if bleed is None:
         bleed = bool(settings.get("bleed", template.meta.get("needs_bleed", False)))
-    colors = {**(template.meta.get("colors") or {}), **((book.manifest.get("design") or {}).get("colors") or {})}
+    ink = str(ink or settings.get("ink", "color"))
+    colors = print_colors(book, template, ink)
 
     out = build_dir(book, language, "print")
     if out.exists():
@@ -142,6 +168,7 @@ def build_print(book: Book, language: str, *, bleed: bool | None = None, engine_
         "trim": trim_name,
         "bleed": bleed,
         "paper": settings.get("paper", "white"),
+        "ink": ink,
         "overfull": len(re.findall(r"^Overfull \\[hv]box", log, re.M)),
         "underfull": len(re.findall(r"^Underfull \\[hv]box", log, re.M)),
     })

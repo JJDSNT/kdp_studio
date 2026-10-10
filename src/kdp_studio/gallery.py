@@ -55,6 +55,9 @@ def themes(book_root: Path | None = None) -> list[dict[str, Any]]:
             continue
         theme = by_name.setdefault(template.name, {"name": template.name, "title": template.title, "kinds": {},
                                                    "source": template.source})
+        for field in ("designed_by", "brief", "based_on", "inspired_by"):
+            if template.meta.get(field):
+                theme[field] = template.meta[field]
         theme["kinds"][template.kind] = {"description": template.description, "source": template.source,
                                          "fonts": list(template.meta.get("fonts") or []),
                                          "colors": dict(template.meta.get("colors") or {}),
@@ -64,20 +67,20 @@ def themes(book_root: Path | None = None) -> list[dict[str, Any]]:
     return sorted(by_name.values(), key=lambda t: t["name"])
 
 
-def key(theme: str, language: str, book_root: Path | None = None) -> str:
-    """What a render depends on: the theme's files, the specimen, the labels' language."""
+def key(theme: str, language: str, book_root: Path | None = None, ink: str = "color") -> str:
+    """What a render depends on: the theme's files, the specimen, the labels' language, the ink."""
 
-    hasher = hashlib.sha256(f"5:{theme}:{language}".encode())
+    hasher = hashlib.sha256(f"6:{theme}:{language}:{ink}".encode())
     folders = [_specimen()] + [catalog.get(kind, theme, book_root).path for kind in KINDS
                                if any(t.kind == kind and t.name == theme for t in catalog.catalog(book_root))]
     for folder in folders:
         for path in sorted(p for p in folder.rglob("*") if p.is_file()):
             hasher.update(str(path.relative_to(folder)).encode() + b"\0" + path.read_bytes())
-    return f"{theme}-{language}-{hasher.hexdigest()[:12]}"
+    return f"{theme}-{language}-{ink}-{hasher.hexdigest()[:12]}"
 
 
-def built(theme: str, language: str, book_root: Path | None = None) -> dict[str, Any] | None:
-    path = cache_dir() / key(theme, language, book_root) / "gallery.json"
+def built(theme: str, language: str, book_root: Path | None = None, ink: str = "color") -> dict[str, Any] | None:
+    path = cache_dir() / key(theme, language, book_root, ink) / "gallery.json"
     return json.loads(path.read_text("utf-8")) if path.is_file() else None
 
 
@@ -85,8 +88,8 @@ def _squash(text: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text.lower())
 
 
-def build(theme: str, language: str, book_root: Path | None = None) -> dict[str, Any]:
-    """Render the specimen in one theme: print pages, the cover, the ebook."""
+def build(theme: str, language: str, book_root: Path | None = None, ink: str = "color") -> dict[str, Any]:
+    """Render the specimen in one theme: print pages (in colour or in black ink), the cover, the ebook."""
 
     from .build import build_ebook, build_print
     from .cover import build_cover
@@ -94,8 +97,12 @@ def build(theme: str, language: str, book_root: Path | None = None) -> dict[str,
     available = {t.kind for t in catalog.catalog(book_root) if t.name == theme and t.kind in KINDS}
     if not available:
         raise NotFoundError(f"No theme named {theme!r}", available=[t["name"] for t in themes(book_root)])
-    name = key(theme, language, book_root)
+    name = key(theme, language, book_root, ink)
     out = cache_dir() / name
+    # A theme that changed leaves renders nobody will ask for again.
+    for stale in cache_dir().glob(f"{theme}-{language}-{ink}-*"):
+        if stale != out:
+            shutil.rmtree(stale, ignore_errors=True)
     work = out.with_name(name + ".work")
     for folder in (out, work):
         if folder.exists():
@@ -111,10 +118,11 @@ def build(theme: str, language: str, book_root: Path | None = None) -> dict[str,
                     if kind in available else re.sub(rf"\n  {kind}: \{{[^\n]*", "", manifest))
     (work / BOOK_FILENAME).write_text(manifest, encoding="utf-8")
     book = load_book(work)
-    report: dict[str, Any] = {"theme": theme, "language": language, "key": name, "pages": [], "cover": "",
+    report: dict[str, Any] = {"theme": theme, "language": language, "ink": ink, "key": name, "pages": [], "cover": "",
                               "wrap": "", "ebook": []}
     if "print" in available:
-        interior = build_print(book, language, bleed=False)
+        interior = build_print(book, language, bleed=False, ink=ink)
+        report["overfull"], report["underfull"] = interior.details["overfull"], interior.details["underfull"]
         if not shutil.which("gs"):
             raise ToolUnavailableError("Ghostscript is needed to show pages; `kdp doctor` says how")
         (work / "pages").mkdir()
@@ -202,6 +210,14 @@ def apply_theme(book: Book, theme: str, *, actor: Actor, reason: str = "") -> di
             raise ValidationError(f"Theme {theme!r} has no print layout for trim {trim!r}", trims=sorted(trims))
     path = book.root / BOOK_FILENAME
     with book_lock(book.root):
+        # A book must build from what it holds: a theme of the person's own catalogue is copied into it.
+        carried = []
+        for kind in wanted:
+            template = catalog.get(kind, theme, book.root)
+            if template.source == "yours":
+                target = book.root / "templates" / kind / theme
+                shutil.copytree(template.path, target, dirs_exist_ok=True)
+                carried.append(target)
         before = path.read_text("utf-8")
         lines = before.splitlines(keepends=True)
         start = next((i for i, line in enumerate(lines) if line.startswith("editions:")), None)
@@ -223,8 +239,9 @@ def apply_theme(book: Book, theme: str, *, actor: Actor, reason: str = "") -> di
             raise ValidationError(f"Could not set the template of {', '.join(wanted)} in {BOOK_FILENAME}; "
                                   "its editions block is written in a way this command does not read")
         changed = [kind for kind in wanted if in_use(book).get(kind) != theme]
-        if changed:
-            commit(book.root, [path], f"Design: theme {theme} for {', '.join(changed)}"
+        if changed or carried:
+            commit(book.root, [path, *carried], f"Design: theme {theme} for {', '.join(changed or wanted)}"
                    + (f" — {reason}" if reason else ""), actor)
     return {"theme": theme, "editions": wanted, "changed": changed,
+            "carried": [str(p.relative_to(book.root)) for p in carried],
             "left": sorted(kind for kind in book.editions if kind not in available)}

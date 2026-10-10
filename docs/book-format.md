@@ -20,7 +20,7 @@ contents:                        # the reading order, language-neutral
     kind: epilogue               # part | epilogue | appendix
     sections: [epilogo-24-o-que-ainda-nao-sabemos-delegar]
 editions:
-  print: {template: nocturne, trim: 6x9, paper: white, bleed: true}
+  print: {template: nocturne, trim: 6x9, paper: white, bleed: true, ink: color}   # ink: color | black
   ebook: {template: nocturne}
   cover: {template: nocturne, art: horizon, focus: [0.6, 0.6], publisher: kdp}
 exercises:
@@ -28,6 +28,10 @@ exercises:
 design:
   colors: {cold: "32D9E2"}       # optional overrides of the template palette
 ```
+
+`ink: black` builds the interior in black ink only — every colour becomes a
+grey the theme chose — which is what a black-and-white printing costs less
+for; the print check then fails any page that still carries colour.
 
 A section id is its file name without `.md`, and it is the same in every
 language: that is what keeps a translated section tied to its source.

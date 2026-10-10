@@ -9,7 +9,9 @@ bleed: 0.125
 # Spine width = base + pages × per_page[paper].
 spine:
   base: 0
-  per_page: {white: 0.002252, cream: 0.0025}
+  # white and cream: black ink (and standard colour, on white). premium-color:
+  # the heavier paper of KDP's premium colour printing.
+  per_page: {white: 0.002252, cream: 0.0025, premium-color: 0.002347}
 # No text on a spine thinner than this many pages; text keeps `margin` clear
 # on each side.
 spine_text: {min_pages: 100, margin: 0.0625}

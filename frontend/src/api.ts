@@ -143,6 +143,8 @@ export interface Catalogue {
 
 export interface Theme {
   name: string; title: string; source: string; in_use: boolean; used_by: string[];
+  designed_by?: string; brief?: string; based_on?: string;
+  inspired_by?: { url: string; title: string; license: string; taken: string }[];
   kinds: Record<string, { description: string; source: string; fonts: string[]; colors: Record<string, string>; origin: string }>;
   render: null | {
     key: string; pages: { file: string; role: string }[]; cover: string; wrap: string; ebook: string[];
@@ -192,8 +194,8 @@ export function openBook(path: string): Promise<{ book: string; path: string }> 
 }
 
 /** Render a theme over the specimen: a cache, not a change to any book. */
-export function renderTheme(theme: string, language: string): Promise<unknown> {
+export function renderTheme(theme: string, language: string, ink = "color"): Promise<unknown> {
   return fetch("/api/gallery/build", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ theme, language }),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ theme, language, ink }),
   }).then((r) => json<unknown>(r));
 }

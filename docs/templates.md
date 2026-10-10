@@ -12,6 +12,15 @@ with `kdp theme <book> <name>`. Built in: `nocturne`, `folio`, `signal`. The
 control room shows each one applied to the same specimen text
 (`src/kdp_studio/specimen/`); a new template appears there by existing.
 
+The catalogue has three layers, a later one replacing the same name: built-in,
+the person's own (`$XDG_DATA_HOME/kdp-studio/templates/<kind>/<name>/`, for all
+their books), and the book's. A theme taken from the person's own is copied
+into the book. `kdp theme <book> <name> --design --brief "…" [--reference URL]`
+has the designer draw one: it joins the person's catalogue only if the
+specimen builds with it, and its manifest says what it was drawn from
+(`designed_by`, `brief`, `based_on`, and `inspired_by` with each address
+looked at, its licence and what was taken).
+
 The renderers emit *semantic* markup: "a concept callout", "a prompt with a QR
 code". The template decides what that looks like. The contract below is all a
 template must implement.
@@ -33,6 +42,7 @@ trims:                 # print only: the layouts this template was designed for
   6x9: {paper: [6in, 9in], typeblock: [4.05in, 7.05in], spine_margin: 0.98in, top_margin: 0.86in}
 colors: {ink: "12202B", …}   # a book may override them under design.colors
 needs_bleed: true      # ink to the edge on some pages
+mono: {cold: "707070"} # print only, optional: the grey a colour takes in black ink
 ```
 
 A trim a template does not list is refused, never guessed. Colours are named

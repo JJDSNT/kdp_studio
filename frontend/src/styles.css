@@ -162,3 +162,5 @@ header nav .apart { width: 1px; height: 1.4em; background: #0002; }
 .zoom { position: fixed; inset: 0; background: #000c; display: flex; align-items: center; justify-content: center;
   z-index: 50; cursor: zoom-out; }
 .zoom img { max-height: 94vh; max-width: 94vw; background: white; }
+.chips .apart { display: inline-block; width: 1px; height: 1.4em; background: #0002; margin: 0 .5em; vertical-align: middle; }
+.strip figure.ebook iframe { width: 300px; height: 480px; }

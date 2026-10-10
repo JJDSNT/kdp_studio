@@ -112,7 +112,7 @@ class Studio:
         return {"templates": templates, "publishers": profiles, "editions": book.editions,
                 "overrides": (book.manifest.get("design") or {}).get("colors") or {}}
 
-    def gallery(self, language: str) -> list[dict[str, Any]]:
+    def gallery(self, language: str, ink: str = "color") -> list[dict[str, Any]]:
         """Every theme, with its render over the specimen when there is one, and what this book uses."""
 
         from . import gallery
@@ -121,7 +121,7 @@ class Studio:
         used = gallery.in_use(book)
         out = []
         for theme in gallery.themes(book.root):
-            render = gallery.built(theme["name"], language, book.root)
+            render = gallery.built(theme["name"], language, book.root, ink)
             out.append({**theme, "render": render,
                         "used_by": sorted(kind for kind, name in used.items() if name == theme["name"]),
                         "in_use": bool(used) and all(used.get(kind) == theme["name"] for kind in used
@@ -404,8 +404,8 @@ def create_app(root: Path | Studio, *, copilot_url: str = "", assistant_reason: 
         return studio.document(path)
 
     @app.get("/api/gallery")
-    def gallery_list(lang: str):
-        return studio.gallery(lang)
+    def gallery_list(lang: str, ink: str = "color"):
+        return studio.gallery(lang, ink)
 
     @app.post("/api/gallery/build")
     async def gallery_build(request: Request):
@@ -415,7 +415,7 @@ def create_app(root: Path | Studio, *, copilot_url: str = "", assistant_reason: 
         body = await request.json()
         if not isinstance(body, dict) or not body.get("theme") or not body.get("language"):
             raise ValidationError("A render needs a theme and a language")
-        return gallery.build(str(body["theme"]), str(body["language"]), studio.root)
+        return gallery.build(str(body["theme"]), str(body["language"]), studio.root, str(body.get("ink") or "color"))
 
     @app.get("/gallery/{key}/epub/{name:path}")
     def gallery_epub(key: str, name: str):

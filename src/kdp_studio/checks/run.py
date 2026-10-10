@@ -26,7 +26,8 @@ def run_checks(book: Book, language: str, edition: str) -> dict[str, Any]:
         trim = tuple(float(v.removesuffix("in")) for v in paper)
         target = pdfs[0]
         findings = check_print(target, trim=trim, bleed=target.stem.endswith("-bleed"),
-                               paper=settings.get("paper", "white"), log=out / "book.log")
+                               paper=settings.get("paper", "white"), log=out / "book.log",
+                               ink=str(settings.get("ink", "color")))
     elif edition == "cover":
         from ..cover import built_report
         from .cover import check_cover

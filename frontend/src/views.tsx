@@ -700,6 +700,7 @@ export function JobsView({ language }: { language: string }) {
               {Array.isArray(job.result.translated) && (job.result.translated as { section: string; version: string }[]).map((t) => (
                 <span key={t.version}> <a href={href({ view: "version", language: job.payload.language || language,
                   section: t.section, version: t.version })}>{t.section} →</a></span>))}
+              {job.kind === "design_theme" ? <> <a href={href({ view: "templates", language })}>Gallery →</a></> : null}
               {job.kind.startsWith("translate") || job.kind === "add_language" || job.kind === "propose_glossary"
                 ? <> <a href={href({ view: "translation", language: job.payload.language || language })}>Translation →</a></> : null}</p>
           )}
@@ -924,7 +925,10 @@ const PAGE_ROLES: [string, string][] = [["part", "Part opening"], ["chapter", "C
   ["callouts", "Callouts"], ["exercise", "Exercise"]];
 
 export function TemplatesView({ language, onChanged }: { language: string; onChanged: () => void }) {
-  const themes = useQuery(() => get<Theme[]>("/api/gallery", { lang: language }), [language]);
+  const [medium, setMedium] = useState<"print" | "ebook">("print");
+  const [ink, setInk] = useState("color");
+  const [eink, setEink] = useState(false);
+  const themes = useQuery(() => get<Theme[]>("/api/gallery", { lang: language, ink }), [language, ink]);
   const catalogue = useQuery(() => get<Catalogue>("/api/templates"), []);
   const [rendering, setRendering] = useState("");
   const [status, setStatus] = useState("");
@@ -935,11 +939,22 @@ export function TemplatesView({ language, onChanged }: { language: string; onCha
   useEffect(() => {
     if (!pending || rendering) return;
     setRendering(pending);
-    renderTheme(pending, language)
+    renderTheme(pending, language, ink)
       .catch((e: Error) => setStatus(`${pending}: ${e.message}`))
       .finally(() => { setRendering(""); themes.reload(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending, language]);
+  }, [pending, language, ink]);
+
+  const [draft, setDraft] = useState({ name: "", brief: "", based_on: "nocturne", reference: "" });
+
+  async function design() {
+    try {
+      await runCommand("start_job", { kind: "design_theme", payload: { ...draft, name: draft.name.trim(), language } });
+      go({ view: "jobs", language });
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
 
   async function use(theme: string) {
     const reason = window.prompt(`Take the theme “${theme}” for this book? Say why, for the book's history.`, "");
@@ -963,11 +978,31 @@ export function TemplatesView({ language, onChanged }: { language: string; onCha
       <p className="muted">Each theme applied to the same sample text, so a design is chosen by looking: the print
         interior, the cover and the ebook. Taking a theme changes one name per edition in <code>book.yaml</code>; your
         text is not touched, and you can come back.</p>
+      <div className="chips">
+        <button className={medium === "print" ? "" : "secondary"} onClick={() => setMedium("print")}>Print</button>
+        <button className={medium === "ebook" ? "" : "secondary"} onClick={() => setMedium("ebook")}>Ebook</button>
+        <span className="apart" />
+        {medium === "print" ? (
+          <>
+            <button className={ink === "color" ? "" : "secondary"} onClick={() => setInk("color")}>Colour</button>
+            <button className={ink === "black" ? "" : "secondary"} onClick={() => setInk("black")}
+              title="A black-and-white interior costs less to print; the cover stays in colour">Black ink</button>
+          </>
+        ) : (
+          <>
+            <button className={eink ? "secondary" : ""} onClick={() => setEink(false)}>Colour screen</button>
+            <button className={eink ? "" : "secondary"} onClick={() => setEink(true)}>E-ink</button>
+          </>
+        )}
+      </div>
+      {medium === "print" && ink === "black" && (
+        <p className="muted">The interior in black ink only: every colour becomes the grey the theme chose, or its
+          luminance. To print the book this way, write <code>ink: black</code> under <code>editions.print</code> in
+          <code> book.yaml</code>; the check then fails any page that still carries colour.</p>)}
       <Problem text={status} />
       {themes.data.map((theme) => {
-        const print = theme.kinds.print || theme.kinds.ebook || theme.kinds.cover;
+        const print = theme.kinds[medium] || theme.kinds.print || theme.kinds.ebook || theme.kinds.cover;
         const base = theme.render ? `/gallery/${theme.render.key}` : "";
-        const chapter = theme.render?.ebook.find((f) => f.startsWith("text-") && !f.includes("praefatio"));
         return (
           <section key={theme.name} className={`theme ${theme.in_use ? "in-use" : ""}`}>
             <div className="theme-head">
@@ -978,13 +1013,32 @@ export function TemplatesView({ language, onChanged }: { language: string; onCha
             </div>
             <p>{print.description}</p>
             <p className="muted">{Object.keys(theme.kinds).join(" · ")} · {theme.source}
-              {print.fonts.length > 0 && <> · {print.fonts.join(", ")}</>}</p>
+              {print.fonts.length > 0 && <> · {print.fonts.join(", ")}</>}
+              {theme.designed_by && <> · drawn by the {theme.designed_by} over {theme.based_on}</>}</p>
+            {theme.brief && <p className="muted">Brief: “{theme.brief}”</p>}
+            {(theme.inspired_by || []).map((r) => (
+              <p key={r.url} className="muted">Looked at <a href={r.url} target="_blank" rel="noreferrer">{r.title || r.url}</a>
+                {" "}({r.license || "no licence stated"}): {r.taken}</p>))}
             {Object.keys(print.colors).length > 0 && (
               <p className="swatches">{Object.entries(print.colors).map(([name, value]) => (
                 <span key={name} title={`${name} #${value}`} style={{ background: `#${value}` }} />))}</p>
             )}
             {!theme.render ? (
               <p className="muted">{rendering === theme.name ? "Rendering over the sample text…" : "Waiting to be rendered…"}</p>
+            ) : medium === "ebook" ? (
+              <div className="strip">
+                {theme.render.cover && (
+                  <figure onClick={() => setZoom(`${base}/${theme.render!.cover}`)}>
+                    <img src={`${base}/${theme.render.cover}`} alt="cover" style={{ filter: eink ? "grayscale(1)" : "none" }} />
+                    <figcaption>Cover</figcaption></figure>)}
+                {theme.render.ebook.filter((f) => !f.includes("praefatio")).map((file) => (
+                  <figure key={file} className="ebook">
+                    <iframe title={`${theme.name} ${file}`} src={`${base}/epub/${file}`}
+                      style={{ filter: eink ? "grayscale(1)" : "none" }} />
+                    <figcaption>{file.startsWith("part-") ? "Part opening" : file.includes("exercitium") ? "Exercise and prompt" : "Chapter, callouts"}</figcaption>
+                  </figure>))}
+                {!theme.kinds.ebook && <p className="muted">This theme has no ebook.</p>}
+              </div>
             ) : (
               <div className="strip">
                 {theme.render.cover && (
@@ -997,18 +1051,37 @@ export function TemplatesView({ language, onChanged }: { language: string; onCha
                       <img className="paper" src={`${base}/${page.file}`} alt={label} /><figcaption>{label}</figcaption></figure>
                   ) : null;
                 })}
-                {chapter && (
-                  <figure className="ebook">
-                    <iframe title={`${theme.name} ebook`} src={`${base}/epub/${chapter}`} />
-                    <figcaption>Ebook</figcaption></figure>)}
                 {theme.render.wrap && (
                   <figure className="wide" onClick={() => setZoom(`${base}/${theme.render!.wrap}`)}>
                     <img src={`${base}/${theme.render.wrap}`} alt="print wrap" /><figcaption>Print wrap</figcaption></figure>)}
+                {!theme.kinds.print && <p className="muted">This theme has no print interior.</p>}
               </div>
             )}
           </section>
         );
       })}
+      <section className="theme">
+        <h2>A new theme</h2>
+        <p className="muted">The designer draws one from your brief, starting from a theme that exists and, if you
+          point at one, from a page on the web: it takes the design, records the address and its licence, and copies
+          code only when the licence allows. The result is built over the sample text; only if it builds does it
+          join this gallery.</p>
+        <div className="decide">
+          <input placeholder="name (lowercase)" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+          <select value={draft.based_on} onChange={(e) => setDraft({ ...draft, based_on: e.target.value })}>
+            {themes.data.map((t) => <option key={t.name} value={t.name}>from {t.name}</option>)}
+          </select>
+        </div>
+        <div className="decide">
+          <input placeholder="Brief: what the book is, and how its page should feel" value={draft.brief}
+            onChange={(e) => setDraft({ ...draft, brief: e.target.value })} />
+        </div>
+        <div className="decide">
+          <input placeholder="A web page to look at (optional)" value={draft.reference}
+            onChange={(e) => setDraft({ ...draft, reference: e.target.value })} />
+          <button disabled={!draft.name.trim() || !draft.brief.trim()} onClick={design}>Draw it</button>
+        </div>
+      </section>
       {zoom && <div className="zoom" onClick={() => setZoom("")}><img src={zoom} alt="" /></div>}
       {catalogue.data && (
         <>
